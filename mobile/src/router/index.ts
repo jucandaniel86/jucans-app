@@ -1,0 +1,83 @@
+import { createRouter, createWebHistory } from 'vue-router'
+
+import AppLayout from '@/layouts/AppLayout.vue'
+import { useAuthStore } from '@/stores/auth'
+import HomeView from '@/views/HomeView.vue'
+import LoginView from '@/views/LoginView.vue'
+import AddRecipeView from '@/views/AddRecipeView.vue'
+import RecipeDetailView from '@/views/RecipeDetailView.vue'
+import RandomRecipeView from '@/views/RandomRecipeView.vue'
+import RecipesView from '@/views/RecipesView.vue'
+
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    {
+      path: '/login',
+      name: 'login',
+      component: LoginView,
+      meta: { guestOnly: true },
+    },
+    {
+      path: '/',
+      component: AppLayout,
+      meta: { requiresAuth: true },
+      children: [
+        {
+          path: '',
+          name: 'home',
+          component: HomeView,
+        },
+        {
+          path: 'recipes',
+          name: 'recipes',
+          component: RecipesView,
+        },
+        {
+          path: 'recipes/create',
+          name: 'recipe-create',
+          component: AddRecipeView,
+        },
+        {
+          path: 'recipes/random',
+          name: 'recipe-random',
+          component: RandomRecipeView,
+        },
+        {
+          path: 'recipes/:id/edit',
+          name: 'recipe-edit',
+          component: AddRecipeView,
+        },
+        {
+          path: 'recipes/:id',
+          name: 'recipe-detail',
+          component: RecipeDetailView,
+        },
+      ],
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      redirect: '/',
+    },
+  ],
+})
+
+router.beforeEach((to) => {
+  const authStore = useAuthStore()
+
+  if (!authStore.hasRestoredSession) {
+    return true
+  }
+
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    return { name: 'login' }
+  }
+
+  if (to.meta.guestOnly && authStore.isAuthenticated) {
+    return { name: 'home' }
+  }
+
+  return true
+})
+
+export default router
