@@ -16,13 +16,27 @@ describe('recipe presentation', () => {
 
     expect(
       recipeIngredientLabel(
-        { id: 1, name: 'Piept de pui', value: '500.000', unit: 'gram', raw_text: null },
+        {
+          id: 1,
+          name: 'Piept de pui',
+          default_unit: 'gram',
+          value: '500.000',
+          unit: 'gram',
+          raw_text: null,
+        },
         units,
       ),
     ).toBe('500 g Piept de pui')
     expect(
       recipeIngredientLabel(
-        { id: 2, name: 'Sare', value: null, unit: 'none', raw_text: 'sare după gust' },
+        {
+          id: 2,
+          name: 'Sare',
+          default_unit: null,
+          value: null,
+          unit: 'none',
+          raw_text: 'sare după gust',
+        },
         units,
       ),
     ).toBe('sare după gust')

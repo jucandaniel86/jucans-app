@@ -73,7 +73,7 @@ function valueInput(value: number | null): string {
 }
 
 function preferredUnit(result: IngredientResolverResult): string {
-  return result.parsed.unit ?? result.ingredient?.default_unit ?? 'none'
+  return result.unit ?? 'none'
 }
 
 export function mapResolverResults(results: IngredientResolverResult[]): IngredientReviewDraft[] {
@@ -122,7 +122,7 @@ export function mapRecipeIngredients(
     ingredientId: ingredient.id,
     name: ingredient.name,
     value: ingredient.value ?? '',
-    unit: ingredient.unit ?? 'none',
+    unit: ingredient.default_unit ?? 'none',
     rawText: ingredient.raw_text ?? '',
     candidates: [],
   }))
@@ -137,7 +137,7 @@ export function selectExistingCandidate(
     resolution: 'existing',
     ingredientId: candidate.id,
     name: candidate.name,
-    unit: draft.unit === 'none' ? (candidate.default_unit ?? 'none') : draft.unit,
+    unit: candidate.default_unit ?? 'none',
   }
 }
 
@@ -159,6 +159,7 @@ export function associateExistingIngredient(
     resolution: 'existing',
     ingredientId: ingredient.id,
     name: ingredient.name,
+    unit: ingredient.default_unit ?? 'none',
   }
 }
 
@@ -230,7 +231,6 @@ export function validateRecipeDraft(
   }
 
   errors.valid = !errors.name && !errors.url && Object.keys(errors.ingredients).length === 0
-
   return errors
 }
 

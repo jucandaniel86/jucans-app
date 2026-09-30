@@ -6,6 +6,7 @@ import jucansPlaceholder from '@/assets/jucans_logo.png'
 import UserAvatar from '@/components/user/UserAvatar.vue'
 import type { RecipeSummary } from '@/types/food'
 import { recipeSourceLabel } from '@/utils/recipePresentation'
+import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{
   recipe: RecipeSummary
@@ -14,6 +15,7 @@ const props = defineProps<{
 const router = useRouter()
 const visibleTags = computed(() => props.recipe.tags.slice(0, 3))
 const remainingTags = computed(() => Math.max(0, props.recipe.tags.length - 3))
+const authStore = useAuthStore()
 
 function openRecipe(): void {
   router.push({ name: 'recipe-detail', params: { id: props.recipe.id } })
@@ -45,6 +47,7 @@ function editRecipe(): void {
         <div class="recipe-card__title-row">
           <h2>{{ recipe.name }}</h2>
           <button
+            v-if="authStore.user && authStore.user.is_admin"
             type="button"
             :aria-label="`Editează rețeta ${recipe.name}`"
             @click.stop="editRecipe"

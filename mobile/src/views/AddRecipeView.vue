@@ -112,6 +112,9 @@ async function saveRecipe(): Promise<void> {
       >
         Vezi rețeta
       </AppButton>
+      <AppButton block variant="secondary" @click="router.push({ name: 'recipes' })">
+        Toate rețetele
+      </AppButton>
     </div>
   </section>
 

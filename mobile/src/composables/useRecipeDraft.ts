@@ -223,11 +223,33 @@ export function useRecipeDraft() {
   function updateIngredient(updated: IngredientReviewDraft): void {
     const index = reviewIngredients.value.findIndex((ingredient) => ingredient.key === updated.key)
 
-    if (index !== -1) {
-      reviewIngredients.value[index] = updated
-      delete ingredientErrors.value[updated.key]
-      delete associationErrors.value[updated.key]
+    if (index === -1) return
+
+    const current = reviewIngredients.value[index]
+    if (!current) return
+
+    reviewIngredients.value[index] = {
+      ...current,
+      ...updated,
+      resolution:
+        current.resolution !== 'pending' && updated.resolution === 'pending'
+          ? current.resolution
+          : updated.resolution,
+      ingredientId:
+        current.resolution !== 'pending' && updated.resolution === 'pending'
+          ? current.ingredientId
+          : updated.ingredientId,
+      name:
+        current.resolution === 'existing' && updated.resolution === 'pending'
+          ? current.name
+          : updated.name,
+      unit:
+        current.resolution === 'existing' && updated.resolution === 'pending'
+          ? current.unit
+          : updated.unit,
     }
+    delete ingredientErrors.value[updated.key]
+    delete associationErrors.value[updated.key]
   }
 
   function chooseCandidate(key: string, candidate: ExistingIngredient): void {

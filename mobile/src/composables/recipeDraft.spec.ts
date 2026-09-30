@@ -37,6 +37,7 @@ function resolverResult(
     },
     status: 'unresolved',
     ingredient: null,
+    unit: null,
     candidates: [],
     ...overrides,
   }
@@ -48,8 +49,9 @@ describe('recipe ingredient draft mapping', () => {
       {
         id: 17,
         name: 'Pătrunjel',
+        default_unit: 'bunch',
         value: '1.500',
-        unit: 'bunch',
+        unit: 'tablespoon',
         raw_text: 'o legătură și jumătate de pătrunjel',
       },
     ])
@@ -65,14 +67,26 @@ describe('recipe ingredient draft mapping', () => {
     })
   })
 
-  it('maps a matched ingredient and falls back to its configured default unit', () => {
+  it('maps a matched ingredient with the resolver effective unit instead of the parsed unit', () => {
     const parsley: ExistingIngredient = {
       id: 17,
       name: 'Pătrunjel',
       default_unit: 'bunch',
     }
 
-    const [draft] = mapResolverResults([resolverResult({ status: 'matched', ingredient: parsley })])
+    const [draft] = mapResolverResults([
+      resolverResult({
+        status: 'matched',
+        ingredient: parsley,
+        unit: 'bunch',
+        parsed: {
+          value: 2,
+          unit: 'tablespoon',
+          ingredient_text: 'patrunjel',
+          normalized_text: 'patrunjel',
+        },
+      }),
+    ])
 
     expect(draft).toMatchObject({
       resolution: 'existing',
@@ -95,10 +109,11 @@ describe('recipe ingredient draft mapping', () => {
         raw_text: '1 ardei',
         parsed: {
           value: 1,
-          unit: null,
+          unit: 'tablespoon',
           ingredient_text: 'ardei',
           normalized_text: 'ardei',
         },
+        unit: 'tablespoon',
         status: 'candidates',
         candidates: [pepper],
       }),
@@ -128,6 +143,7 @@ describe('recipe ingredient draft mapping', () => {
           ingredient_text: 'gochujang',
           normalized_text: 'gochujang',
         },
+        unit: 'tablespoon',
       }),
     ])
 
@@ -150,6 +166,7 @@ describe('recipe ingredient draft mapping', () => {
           ingredient_text: 'frunze de patrunjel',
           normalized_text: 'frunze de patrunjel',
         },
+        unit: 'tablespoon',
       }),
     ])
     const associated = associateExistingIngredient(draft!, {
@@ -164,7 +181,7 @@ describe('recipe ingredient draft mapping', () => {
       ingredientId: 17,
       name: 'Pătrunjel',
       value: '2',
-      unit: 'tablespoon',
+      unit: 'bunch',
       rawText: '2 linguri frunze de patrunjel',
     })
   })

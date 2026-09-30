@@ -33,5 +33,30 @@ describe('IngredientReviewCard', () => {
     expect(wrapper.classes()).toContain('ingredient-card--invalid')
     expect(wrapper.attributes('aria-invalid')).toBe('true')
     expect(wrapper.text()).toContain('Ingredientul apare deja în rețetă')
+    expect(wrapper.find('select').attributes('disabled')).toBeDefined()
+  })
+
+  it('keeps unit selection editable for a new ingredient', () => {
+    const wrapper = mount(IngredientReviewCard, {
+      props: {
+        item: {
+          key: 'gochujang',
+          sourceStatus: 'unresolved',
+          resolution: 'new',
+          ingredientId: null,
+          name: 'Gochujang',
+          value: '2',
+          unit: 'tablespoon',
+          rawText: '2 linguri gochujang',
+          candidates: [],
+        },
+        index: 0,
+        units: [{ value: 'tablespoon', label: 'Lingură' }],
+        associationSaving: false,
+        associationError: '',
+      },
+    })
+
+    expect(wrapper.find('select').attributes('disabled')).toBeUndefined()
   })
 })

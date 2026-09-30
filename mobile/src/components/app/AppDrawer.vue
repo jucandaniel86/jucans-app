@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 
 import AvatarPicker from '@/components/user/AvatarPicker.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
+import { MENU_SECTIONS } from '@/config/menu'
 
 const props = defineProps<{
   open: boolean
@@ -79,41 +80,31 @@ onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
     </header>
 
     <nav class="app-drawer__nav" aria-label="Secțiuni">
-      <RouterLink class="drawer-link" :to="{ name: 'home' }" @click="$emit('close')">
-        <span class="drawer-link__mark drawer-link__mark--turquoise" aria-hidden="true" />
-        <span>Acasa</span>
-      </RouterLink>
+      <template v-for="section in MENU_SECTIONS" :key="section.id">
+        <div v-if="section.dividerBefore" class="app-drawer__divider" />
 
-      <div class="app-drawer__group">
-        <p class="app-drawer__label">Mâncare</p>
-        <RouterLink class="drawer-link" :to="{ name: 'recipes' }" @click="$emit('close')">
-          <span class="drawer-link__mark drawer-link__mark--pink" aria-hidden="true" />
-          <span>Rețete</span>
-        </RouterLink>
-        <RouterLink class="drawer-link" :to="{ name: 'recipe-create' }" @click="$emit('close')">
-          <span class="drawer-link__mark drawer-link__mark--yellow" aria-hidden="true" />
-          <span>Adaugă rețetă</span>
-        </RouterLink>
-      </div>
+        <div class="app-drawer__section" :class="{ 'app-drawer__section--grouped': section.label }">
+          <p v-if="section.label" class="app-drawer__label">{{ section.label }}</p>
 
-      <button class="drawer-link" type="button" disabled>
-        <span class="drawer-link__mark drawer-link__mark--turquoise" aria-hidden="true" />
-        <span>Shopping</span>
-        <span class="drawer-link__soon">Curând</span>
-      </button>
+          <template v-for="item in section.items" :key="item.id">
+            <RouterLink
+              v-if="item.routeName && !item.restricted && !item.soon"
+              class="drawer-link"
+              :to="{ name: item.routeName }"
+              @click="$emit('close')"
+            >
+              <span class="drawer-link__mark" :class="item.markerClass" aria-hidden="true" />
+              <span>{{ item.label }}</span>
+            </RouterLink>
 
-      <div class="app-drawer__divider" />
-
-      <button class="drawer-link" type="button" disabled>
-        <span class="drawer-link__mark drawer-link__mark--yellow" aria-hidden="true" />
-        <span>Program</span>
-        <span class="drawer-link__soon">Curând</span>
-      </button>
-      <button class="drawer-link" type="button" disabled>
-        <span class="drawer-link__mark drawer-link__mark--pink" aria-hidden="true" />
-        <span>Taskuri</span>
-        <span class="drawer-link__soon">Curând</span>
-      </button>
+            <button v-else class="drawer-link" type="button" disabled>
+              <span class="drawer-link__mark" :class="item.markerClass" aria-hidden="true" />
+              <span>{{ item.label }}</span>
+              <span v-if="item.soon" class="drawer-link__soon">Curând</span>
+            </button>
+          </template>
+        </div>
+      </template>
     </nav>
 
     <footer class="app-drawer__footer">
@@ -232,9 +223,12 @@ onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
   overflow-y: auto;
 }
 
-.app-drawer__group {
+.app-drawer__section {
   display: grid;
   gap: var(--space-1);
+}
+
+.app-drawer__section--grouped {
   margin-top: var(--space-3);
 }
 

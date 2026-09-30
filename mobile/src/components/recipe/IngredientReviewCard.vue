@@ -162,6 +162,7 @@ watch(
         label="Unitate"
         :options="units"
         :error="error?.unit"
+        :disabled="item.resolution === 'existing'"
         @update:model-value="updateField('unit', $event)"
       />
     </div>

@@ -2,6 +2,7 @@ export interface AuthUser {
   id: number
   username: string
   avatar: string | null
+  is_admin: boolean
 }
 
 export interface LoginCredentials {

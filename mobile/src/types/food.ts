@@ -50,6 +50,7 @@ export interface IngredientResolverResult {
   parsed: ResolverParsedIngredient
   status: ResolverStatus
   ingredient: ExistingIngredient | null
+  unit: string | null
   candidates: ExistingIngredient[]
 }
 
@@ -115,6 +116,7 @@ export interface RecipeCreateResponse {
 export interface RecipeIngredientDetail {
   id: number
   name: string
+  default_unit: string | null
   value: string | null
   unit: string | null
   raw_text: string | null
