@@ -60,6 +60,14 @@ onMounted(async () => {
   }
 
   await optionsPromise
+
+  const reviewIngredientId = Number(route.query.reviewIngredient)
+  if (isEdit.value && Number.isInteger(reviewIngredientId) && reviewIngredientId > 0) {
+    await nextTick()
+    document
+      .querySelector(`[data-ingredient-id="${reviewIngredientId}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 })
 
 async function createTag(payload: FoodTagPayload): Promise<void> {
@@ -79,7 +87,14 @@ async function saveRecipe(): Promise<void> {
   }
 
   if (saved && isEdit.value && recipeId.value) {
-    await router.replace({ name: 'recipe-detail', params: { id: recipeId.value } })
+    if (route.query.returnTo === 'admin-recipe-reviews') {
+      await router.replace({
+        name: 'admin-recipe-reviews',
+        query: typeof route.query.reviewSearch === 'string' ? { search: route.query.reviewSearch } : {},
+      })
+    } else {
+      await router.replace({ name: 'recipe-detail', params: { id: recipeId.value } })
+    }
   }
 }
 </script>

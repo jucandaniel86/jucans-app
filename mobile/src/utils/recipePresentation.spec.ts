@@ -19,7 +19,6 @@ describe('recipe presentation', () => {
         {
           id: 1,
           name: 'Piept de pui',
-          default_unit: 'gram',
           value: '500.000',
           unit: 'gram',
           raw_text: null,
@@ -32,7 +31,6 @@ describe('recipe presentation', () => {
         {
           id: 2,
           name: 'Sare',
-          default_unit: null,
           value: null,
           unit: 'none',
           raw_text: 'sare după gust',

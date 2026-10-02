@@ -5,6 +5,8 @@ import { useAuthStore } from '@/stores/auth'
 import HomeView from '@/views/HomeView.vue'
 import LoginView from '@/views/LoginView.vue'
 import AddRecipeView from '@/views/AddRecipeView.vue'
+import AdminIngredientsView from '@/views/AdminIngredientsView.vue'
+import AdminRecipeReviewsView from '@/views/AdminRecipeReviewsView.vue'
 import RecipeDetailView from '@/views/RecipeDetailView.vue'
 import RandomRecipeView from '@/views/RandomRecipeView.vue'
 import RecipesView from '@/views/RecipesView.vue'
@@ -53,6 +55,18 @@ const router = createRouter({
           name: 'recipe-detail',
           component: RecipeDetailView,
         },
+        {
+          path: 'admin/ingredients',
+          name: 'admin-ingredients',
+          component: AdminIngredientsView,
+          meta: { requiresAdmin: true },
+        },
+        {
+          path: 'admin/recipe-reviews',
+          name: 'admin-recipe-reviews',
+          component: AdminRecipeReviewsView,
+          meta: { requiresAdmin: true },
+        },
       ],
     },
     {
@@ -74,6 +88,10 @@ router.beforeEach((to) => {
   }
 
   if (to.meta.guestOnly && authStore.isAuthenticated) {
+    return { name: 'home' }
+  }
+
+  if (to.meta.requiresAdmin && !authStore.user?.is_admin) {
     return { name: 'home' }
   }
 

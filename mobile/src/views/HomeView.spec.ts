@@ -30,7 +30,7 @@ describe('HomeView random food widget', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     setActivePinia(createPinia())
-    useAuthStore().user = { id: 1, username: 'daniel', avatar: null }
+    useAuthStore().user = { id: 1, username: 'daniel', avatar: null, is_admin: false }
     mocks.listTags.mockReset().mockResolvedValue({
       data: [
         { id: 2, name: 'Pui', normalized_name: 'pui', emoji: '🐔', recipe_count: 12 },

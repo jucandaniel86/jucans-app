@@ -58,6 +58,7 @@ watch(
   <article
     class="ingredient-card"
     :class="[`ingredient-card--${state.className}`, { 'ingredient-card--invalid': hasError }]"
+    :data-ingredient-id="item.ingredientId"
     :aria-invalid="hasError"
   >
     <header class="ingredient-card__header">
@@ -162,7 +163,6 @@ watch(
         label="Unitate"
         :options="units"
         :error="error?.unit"
-        :disabled="item.resolution === 'existing'"
         @update:model-value="updateField('unit', $event)"
       />
     </div>

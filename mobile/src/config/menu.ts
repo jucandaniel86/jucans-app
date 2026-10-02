@@ -1,4 +1,9 @@
-export type MenuRouteName = 'home' | 'recipes' | 'recipe-create'
+export type MenuRouteName =
+  | 'home'
+  | 'recipes'
+  | 'recipe-create'
+  | 'admin-ingredients'
+  | 'admin-recipe-reviews'
 
 export type MenuMarkerClass =
   'drawer-link__mark--turquoise' | 'drawer-link__mark--pink' | 'drawer-link__mark--yellow'
@@ -93,6 +98,29 @@ export const MENU_SECTIONS: MenuSection[] = [
         markerClass: 'drawer-link__mark--pink',
         restricted: false,
         soon: true,
+      },
+    ],
+  },
+  {
+    id: 'administration',
+    label: 'Administration',
+    dividerBefore: true,
+    items: [
+      {
+        id: 'admin-ingredients',
+        label: 'Ingrediente',
+        routeName: 'admin-ingredients',
+        markerClass: 'drawer-link__mark--turquoise',
+        restricted: true,
+        soon: false,
+      },
+      {
+        id: 'admin-recipe-reviews',
+        label: 'Verificare rețete',
+        routeName: 'admin-recipe-reviews',
+        markerClass: 'drawer-link__mark--yellow',
+        restricted: true,
+        soon: false,
       },
     ],
   },

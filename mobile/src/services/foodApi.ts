@@ -1,19 +1,28 @@
 import { api } from '@/services/api'
 import type {
+  AdminIngredient,
+  AdminIngredientFilters,
+  AdminIngredientListResponse,
+  AdminIngredientPayload,
   FoodConfig,
   FoodTag,
   FoodTagPayload,
   IngredientResolverResponse,
   IngredientAliasResponse,
+  IngredientMergePreview,
+  IngredientMergeResponse,
   ExistingIngredient,
   RecipeCreatePayload,
   RecipeCreateResponse,
   RecipeDetailResponse,
   RecipeFilters,
+  RecipeIngredientReviewFilters,
+  RecipeIngredientReviewListResponse,
   RecipeListResponse,
   RandomRecipeResponse,
   ResourceCollection,
   ResourceItem,
+  ShoppingCategory,
 } from '@/types/food'
 
 function recipeFormData(payload: RecipeCreatePayload): FormData {
@@ -44,6 +53,33 @@ function recipeListQuery(filters: RecipeFilters): string {
   if (filters.perPage) parameters.set('per_page', String(filters.perPage))
   if (filters.random) parameters.set('random', 'true')
   if (filters.exclude) parameters.set('exclude', String(filters.exclude))
+
+  const query = parameters.toString()
+  return query ? `?${query}` : ''
+}
+
+function adminIngredientListQuery(filters: AdminIngredientFilters): string {
+  const parameters = new URLSearchParams()
+
+  if (filters.search?.trim()) parameters.set('search', filters.search.trim())
+  if (filters.page) parameters.set('page', String(filters.page))
+  if (filters.perPage) parameters.set('per_page', String(filters.perPage))
+  if (filters.missingUnit) parameters.set('missing_unit', '1')
+  if (filters.missingCategory) parameters.set('missing_category', '1')
+  if (filters.isShoppable !== undefined) {
+    parameters.set('is_shoppable', filters.isShoppable ? '1' : '0')
+  }
+
+  const query = parameters.toString()
+  return query ? `?${query}` : ''
+}
+
+function recipeIngredientReviewListQuery(filters: RecipeIngredientReviewFilters): string {
+  const parameters = new URLSearchParams()
+
+  if (filters.search?.trim()) parameters.set('search', filters.search.trim())
+  if (filters.page) parameters.set('page', String(filters.page))
+  if (filters.perPage) parameters.set('per_page', String(filters.perPage))
 
   const query = parameters.toString()
   return query ? `?${query}` : ''
@@ -113,5 +149,45 @@ export const foodApi = {
     if (options.removeImage) formData.append('remove_image', '1')
 
     return api.post<RecipeDetailResponse>(`/recipes/${recipeId}`, formData)
+  },
+
+  listAdminIngredients(filters: AdminIngredientFilters = {}): Promise<AdminIngredientListResponse> {
+    return api.get<AdminIngredientListResponse>(
+      `/admin/ingredients${adminIngredientListQuery(filters)}`,
+    )
+  },
+
+  updateAdminIngredient(
+    ingredientId: number,
+    payload: AdminIngredientPayload,
+  ): Promise<ResourceItem<AdminIngredient>> {
+    return api.patch<ResourceItem<AdminIngredient>>(`/admin/ingredients/${ingredientId}`, payload)
+  },
+
+  previewIngredientMerge(
+    sourceId: number,
+    targetIngredientId: number,
+  ): Promise<IngredientMergePreview> {
+    return api.post<IngredientMergePreview>(`/admin/ingredients/${sourceId}/merge-preview`, {
+      target_ingredient_id: targetIngredientId,
+    })
+  },
+
+  mergeIngredients(sourceId: number, targetIngredientId: number): Promise<IngredientMergeResponse> {
+    return api.post<IngredientMergeResponse>(`/admin/ingredients/${sourceId}/merge`, {
+      target_ingredient_id: targetIngredientId,
+    })
+  },
+
+  listShoppingCategories(): Promise<ResourceCollection<ShoppingCategory>> {
+    return api.get<ResourceCollection<ShoppingCategory>>('/admin/shopping-categories')
+  },
+
+  listRecipeIngredientReviews(
+    filters: RecipeIngredientReviewFilters = {},
+  ): Promise<RecipeIngredientReviewListResponse> {
+    return api.get<RecipeIngredientReviewListResponse>(
+      `/admin/recipe-ingredient-reviews${recipeIngredientReviewListQuery(filters)}`,
+    )
   },
 }

@@ -27,6 +27,118 @@ export interface ExistingIngredient {
   default_unit: string | null
 }
 
+export interface ShoppingCategory {
+  id: number
+  name: string
+  emoji: string | null
+  sort_order: number
+}
+
+export interface AdminIngredientAlias {
+  id: number
+  alias: string
+}
+
+export interface AdminIngredient {
+  id: number
+  name: string
+  default_unit: string | null
+  is_shoppable: boolean
+  shopping_category: ShoppingCategory | null
+  aliases: AdminIngredientAlias[]
+}
+
+export interface AdminIngredientFilters {
+  search?: string
+  page?: number
+  perPage?: number
+  missingUnit?: boolean
+  missingCategory?: boolean
+  isShoppable?: boolean
+}
+
+export interface AdminIngredientPayload {
+  name: string
+  default_unit: string | null
+  shopping_category_id: number | null
+  is_shoppable: boolean
+}
+
+export interface RecipeIngredientReviewItem {
+  id: number
+  recipe: {
+    id: number
+    name: string
+  }
+  ingredient: {
+    id: number
+    name: string
+    default_unit: string | null
+  }
+  value: string | null
+  unit: string | null
+  raw_text: string | null
+  needs_review: boolean
+}
+
+export interface RecipeIngredientReviewFilters {
+  search?: string
+  page?: number
+  perPage?: number
+}
+
+export interface IngredientMergeSummary {
+  id: number
+  name: string
+  default_unit: string | null
+}
+
+export interface IngredientMergeConflict {
+  recipe_id: number
+  recipe_name: string
+}
+
+export interface IngredientMergeAliasCollision {
+  has_collision: boolean
+  canonical_ingredient: { id: number; name: string } | null
+  existing_alias: {
+    id: number
+    alias: string
+    ingredient_id: number
+    ingredient_name: string
+  } | null
+}
+
+export interface IngredientMergeImpact {
+  recipe_count: number
+  recipe_ingredient_count: number
+  alias_count: number
+  needs_review_count: number
+}
+
+export interface IngredientMergePreview {
+  source: IngredientMergeSummary
+  target: IngredientMergeSummary
+  impact: IngredientMergeImpact
+  unit_mismatch: boolean
+  conflicts: IngredientMergeConflict[]
+  alias_name_collision: IngredientMergeAliasCollision
+  can_merge: boolean
+}
+
+export interface IngredientMergeResponse {
+  target: AdminIngredient
+  merged_source: {
+    id: number
+    name: string
+  }
+  result: {
+    recipe_ingredient_count: number
+    alias_count: number
+    needs_review_count: number
+  }
+}
+
 export interface IngredientAliasResponse {
   data: {
     id: number
@@ -116,7 +228,6 @@ export interface RecipeCreateResponse {
 export interface RecipeIngredientDetail {
   id: number
   name: string
-  default_unit: string | null
   value: string | null
   unit: string | null
   raw_text: string | null
@@ -189,6 +300,28 @@ export interface RecipeDetailResponse {
 
 export interface RandomRecipeResponse {
   data: RecipeSummary | null
+}
+
+export interface AdminIngredientListResponse {
+  data: AdminIngredient[]
+  links: {
+    first: string | null
+    last: string | null
+    prev: string | null
+    next: string | null
+  }
+  meta: PaginationMeta
+}
+
+export interface RecipeIngredientReviewListResponse {
+  data: RecipeIngredientReviewItem[]
+  links: {
+    first: string | null
+    last: string | null
+    prev: string | null
+    next: string | null
+  }
+  meta: PaginationMeta
 }
 
 export interface ResourceCollection<T> {

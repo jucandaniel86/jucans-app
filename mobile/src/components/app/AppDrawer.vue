@@ -4,7 +4,8 @@ import { RouterLink } from 'vue-router'
 
 import AvatarPicker from '@/components/user/AvatarPicker.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
-import { MENU_SECTIONS } from '@/config/menu'
+import { MENU_SECTIONS, type MenuItem } from '@/config/menu'
+import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{
   open: boolean
@@ -23,6 +24,11 @@ const emit = defineEmits<{
 
 const closeButton = ref<HTMLButtonElement | null>(null)
 const pickerOpen = ref(false)
+const authStore = useAuthStore()
+
+function canAccessMenuItem(item: MenuItem): boolean {
+  return Boolean(item.routeName && !item.soon && (!item.restricted || authStore.user?.is_admin))
+}
 
 function handleKeydown(event: KeyboardEvent): void {
   if (pickerOpen.value && event.key === 'Escape') {
@@ -88,7 +94,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
 
           <template v-for="item in section.items" :key="item.id">
             <RouterLink
-              v-if="item.routeName && !item.restricted && !item.soon"
+              v-if="item.routeName && canAccessMenuItem(item)"
               class="drawer-link"
               :to="{ name: item.routeName }"
               @click="$emit('close')"

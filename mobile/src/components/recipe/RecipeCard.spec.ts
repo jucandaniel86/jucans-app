@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 
 import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const routerMocks = vi.hoisted(() => ({
   push: vi.fn<(location: unknown) => void>(),
@@ -12,6 +13,7 @@ vi.mock('vue-router', () => ({
 }))
 
 import RecipeCard from '@/components/recipe/RecipeCard.vue'
+import { useAuthStore } from '@/stores/auth'
 import type { RecipeSummary } from '@/types/food'
 
 const recipe: RecipeSummary = {
@@ -33,6 +35,11 @@ const recipe: RecipeSummary = {
 }
 
 describe('RecipeCard', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerMocks.push.mockReset()
+  })
+
   it('shows the fallback, three tags and the remaining count', () => {
     const wrapper = mount(RecipeCard, { props: { recipe } })
 
@@ -43,7 +50,6 @@ describe('RecipeCard', () => {
   })
 
   it('opens the recipe while the source link remains independent', async () => {
-    routerMocks.push.mockReset()
     const wrapper = mount(RecipeCard, { props: { recipe } })
 
     await wrapper.trigger('click')
@@ -60,7 +66,8 @@ describe('RecipeCard', () => {
   })
 
   it('opens edit directly without triggering card navigation', async () => {
-    routerMocks.push.mockReset()
+    useAuthStore().user = { id: 1, username: 'daniel', avatar: null, is_admin: true }
+
     const wrapper = mount(RecipeCard, { props: { recipe } })
 
     await wrapper.find('button').trigger('click')

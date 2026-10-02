@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -40,6 +41,7 @@ const recipe = {
 
 describe('RandomRecipeView', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     mocks.getRecipe.mockReset().mockResolvedValue({ data: recipe })
     mocks.randomRecipe.mockReset().mockResolvedValue({ data: { ...recipe, id: 21 } })
     mocks.replace.mockReset()

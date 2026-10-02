@@ -18,6 +18,8 @@ async function enforceCurrentRoute(): Promise<void> {
     await router.replace({ name: 'login' })
   } else if (route.meta.guestOnly && authStore.isAuthenticated) {
     await router.replace({ name: 'home' })
+  } else if (route.meta.requiresAdmin && !authStore.user?.is_admin) {
+    await router.replace({ name: 'home' })
   }
 }
 

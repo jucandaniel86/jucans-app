@@ -25,7 +25,7 @@ describe('auth store avatar updates', () => {
 
   it('updates the current user after a successful API response', async () => {
     const store = useAuthStore()
-    store.user = { id: 1, username: 'daniel', avatar: null }
+    store.user = { id: 1, username: 'daniel', avatar: null, is_admin: false }
     apiMocks.patch.mockResolvedValue({
       data: { id: 1, username: 'daniel', avatar: 'avatar-06' },
     })

@@ -49,7 +49,6 @@ describe('recipe ingredient draft mapping', () => {
       {
         id: 17,
         name: 'Pătrunjel',
-        default_unit: 'bunch',
         value: '1.500',
         unit: 'tablespoon',
         raw_text: 'o legătură și jumătate de pătrunjel',
@@ -61,10 +60,31 @@ describe('recipe ingredient draft mapping', () => {
       resolution: 'existing',
       ingredientId: 17,
       name: 'Pătrunjel',
-      value: '1.500',
-      unit: 'bunch',
+      value: '1.5',
+      unit: 'tablespoon',
       rawText: 'o legătură și jumătate de pătrunjel',
     })
+  })
+
+  it('removes fixed decimal padding from values shown in edit inputs', () => {
+    const cases: Array<[string | null, string]> = [
+      ['1.000', 'O bucată'],
+      ['0.500', 'Jumătate'],
+      ['50.000', 'Cincizeci'],
+      ['1.250', 'Unu și un sfert'],
+      [null, 'Fără cantitate'],
+    ]
+    const values = mapRecipeIngredients(
+      cases.map(([value, name], index) => ({
+        id: index + 1,
+        name,
+        value,
+        unit: 'none',
+        raw_text: null,
+      })),
+    ).map((ingredient) => ingredient.value)
+
+    expect(values).toEqual(['1', '0.5', '50', '1.25', ''])
   })
 
   it('maps a matched ingredient with the resolver effective unit instead of the parsed unit', () => {

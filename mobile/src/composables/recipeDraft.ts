@@ -68,8 +68,13 @@ function displayName(value: string): string {
   return trimmed ? trimmed.charAt(0).toLocaleUpperCase('ro-RO') + trimmed.slice(1) : ''
 }
 
-function valueInput(value: number | null): string {
-  return value === null ? '' : String(value)
+function valueInput(value: number | string | null): string {
+  if (value === null) return ''
+
+  const text = String(value)
+  if (!text.includes('.')) return text
+
+  return text.replace(/0+$/, '').replace(/\.$/, '')
 }
 
 function preferredUnit(result: IngredientResolverResult): string {
@@ -121,8 +126,8 @@ export function mapRecipeIngredients(
     resolution: 'existing',
     ingredientId: ingredient.id,
     name: ingredient.name,
-    value: ingredient.value ?? '',
-    unit: ingredient.default_unit ?? 'none',
+    value: valueInput(ingredient.value),
+    unit: ingredient.unit ?? 'none',
     rawText: ingredient.raw_text ?? '',
     candidates: [],
   }))

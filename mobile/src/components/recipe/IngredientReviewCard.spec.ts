@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import IngredientReviewCard from '@/components/recipe/IngredientReviewCard.vue'
 
 describe('IngredientReviewCard', () => {
-  it('highlights an ingredient with a form-level API error', () => {
+  it('highlights an ingredient with a form-level API error and keeps its unit editable', async () => {
     const wrapper = mount(IngredientReviewCard, {
       props: {
         item: {
@@ -21,7 +21,10 @@ describe('IngredientReviewCard', () => {
           candidates: [],
         },
         index: 13,
-        units: [{ value: 'pinch', label: 'Praf' }],
+        units: [
+          { value: 'pinch', label: 'Praf' },
+          { value: 'gram', label: 'Gram' },
+        ],
         error: {
           form: 'Ingredientul apare deja în rețetă. Șterge una dintre apariții.',
         },
@@ -33,7 +36,15 @@ describe('IngredientReviewCard', () => {
     expect(wrapper.classes()).toContain('ingredient-card--invalid')
     expect(wrapper.attributes('aria-invalid')).toBe('true')
     expect(wrapper.text()).toContain('Ingredientul apare deja în rețetă')
-    expect(wrapper.find('select').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('select').attributes('disabled')).toBeUndefined()
+
+    await wrapper.find('select').setValue('gram')
+
+    expect(wrapper.emitted('update')?.[0]?.[0]).toMatchObject({
+      resolution: 'existing',
+      ingredientId: 3,
+      unit: 'gram',
+    })
   })
 
   it('keeps unit selection editable for a new ingredient', () => {
