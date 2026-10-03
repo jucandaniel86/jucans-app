@@ -1,0 +1,10 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Nu rescrie fișierele și directoarele care există fizic
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+
+    # Toate celelalte rutele sunt gestionate de Vue Router
+    RewriteRule ^ index.html [L]
+</IfModule>

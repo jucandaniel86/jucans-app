@@ -37,4 +37,16 @@ class Recipe extends Model
             ->withPivot(['id', 'value', 'unit', 'raw_text'])
             ->withTimestamps();
     }
+
+    public function shoppingLists(): BelongsToMany
+    {
+        return $this->belongsToMany(ShoppingList::class, 'shopping_list_recipes')
+            ->withPivot(['id', 'added_by'])
+            ->withTimestamps();
+    }
+
+    public function shoppingListItemSources(): HasMany
+    {
+        return $this->hasMany(ShoppingListItemSource::class);
+    }
 }

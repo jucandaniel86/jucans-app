@@ -1,0 +1,34 @@
+<?php
+
+namespace App\Http\Requests\Admin;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class ListIngredientsRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'search' => ['nullable', 'string', 'max:255'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'missing_unit' => ['sometimes', 'boolean'],
+            'missing_category' => ['sometimes', 'boolean'],
+            'is_shoppable' => ['sometimes', 'boolean'],
+        ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $search = trim((string) $this->input('search', ''));
+
+        $this->merge([
+            'search' => $search === '' ? null : $search,
+        ]);
+    }
+}

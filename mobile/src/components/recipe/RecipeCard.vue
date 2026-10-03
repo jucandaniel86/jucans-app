@@ -77,27 +77,6 @@ function editRecipe(): void {
         <span v-if="remainingTags">+{{ remainingTags }}</span>
       </div>
 
-      <div class="recipe-card__footer">
-        <div class="recipe-card__creator">
-          <UserAvatar
-            :avatar="recipe.creator.avatar"
-            :username="recipe.creator.username"
-            size="small"
-          />
-          <span>{{ recipe.creator.username }}</span>
-        </div>
-        <AppButton
-          class="recipe-card__shopping-button"
-          variant="secondary"
-          :loading="adding"
-          :aria-label="`Adaugă ${recipe.name} la lista de cumpărături`"
-          title="Adaugă la lista de cumpărături"
-          @click.stop="addToList"
-          @keydown.stop
-        >
-          <span aria-hidden="true">🛒</span>
-        </AppButton>
-      </div>
       <p v-if="shoppingMessage" class="recipe-card__shopping-success" role="status" @click.stop>
         {{ shoppingMessage }}
       </p>
@@ -105,6 +84,27 @@ function editRecipe(): void {
         <p>{{ shoppingError }}</p>
         <small v-if="reviewNames.length">{{ reviewNames.join(' · ') }}</small>
       </div>
+    </div>
+    <div class="recipe-card__footer">
+      <div class="recipe-card__creator">
+        <UserAvatar
+          :avatar="recipe.creator.avatar"
+          :username="recipe.creator.username"
+          size="small"
+        />
+        <span>{{ recipe.creator.username }}</span>
+      </div>
+      <AppButton
+        class="recipe-card__shopping-button"
+        variant="secondary"
+        :loading="adding"
+        :aria-label="`Adaugă ${recipe.name} la lista de cumpărături`"
+        title="Adaugă la lista de cumpărături"
+        @click.stop="addToList"
+        @keydown.stop
+      >
+        <span aria-hidden="true">🛒</span>
+      </AppButton>
     </div>
   </article>
 </template>
@@ -247,6 +247,7 @@ function editRecipe(): void {
   justify-content: space-between;
   gap: var(--space-2);
   margin-top: auto;
+  grid-column: span 2;
 }
 
 .recipe-card__shopping-button {

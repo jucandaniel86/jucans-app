@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -16,6 +17,7 @@ class User extends Authenticatable
     protected $fillable = [
         'username',
         'avatar',
+        'is_admin',
         'pin',
     ];
 
@@ -23,9 +25,23 @@ class User extends Authenticatable
         'pin',
     ];
 
+    protected $casts = [
+        'is_admin' => 'boolean',
+    ];
+
     public function recipes(): HasMany
     {
         return $this->hasMany(Recipe::class, 'created_by');
+    }
+
+    public function createdShoppingLists(): HasMany
+    {
+        return $this->hasMany(ShoppingList::class, 'created_by');
+    }
+
+    public function shoppingLists(): BelongsToMany
+    {
+        return $this->belongsToMany(ShoppingList::class, 'shopping_list_users')->withTimestamps();
     }
 
     public function setPinAttribute(string $pin): void

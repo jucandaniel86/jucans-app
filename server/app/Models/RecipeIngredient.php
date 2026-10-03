@@ -12,10 +12,12 @@ class RecipeIngredient extends Model
         'value',
         'unit',
         'raw_text',
+        'needs_review',
     ];
 
     protected $casts = [
         'value' => 'decimal:3',
+        'needs_review' => 'boolean',
     ];
 
     public function recipe(): BelongsTo

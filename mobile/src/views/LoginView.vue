@@ -106,12 +106,22 @@ async function submit(): Promise<void> {
 
 <style scoped>
 .login-view {
+  --login-padding-top: max(
+    var(--space-5),
+    var(--safe-area-inset-top, env(safe-area-inset-top, 0px))
+  );
+  --login-padding-bottom: max(
+    var(--space-6),
+    var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))
+  );
   display: grid;
   min-height: 100vh;
   min-height: 100dvh;
   place-items: center;
-  padding: max(var(--space-5), env(safe-area-inset-top)) var(--space-5)
-    max(var(--space-6), env(safe-area-inset-bottom));
+  padding: var(--login-padding-top)
+    max(var(--space-5), var(--safe-area-inset-right, env(safe-area-inset-right, 0px)))
+    var(--login-padding-bottom)
+    max(var(--space-5), var(--safe-area-inset-left, env(safe-area-inset-left, 0px)));
   background: linear-gradient(
     180deg,
     var(--color-background-strong) 0,
@@ -135,6 +145,12 @@ async function submit(): Promise<void> {
 
 .login-view__logo {
   width: min(64vw, 260px);
+  /* Reserve space for the unchanged form and heading when the WebView is shorter. */
+  width: min(
+    64vw,
+    260px,
+    max(140px, calc(100dvh - var(--login-padding-top) - var(--login-padding-bottom) - 390px))
+  );
   height: auto;
   filter: drop-shadow(0 12px 14px rgb(21 36 61 / 11%));
 }
@@ -182,7 +198,10 @@ async function submit(): Promise<void> {
   }
 
   .login-view__logo {
-    width: 170px;
+    width: min(
+      170px,
+      max(140px, calc(100dvh - var(--login-padding-top) - var(--login-padding-bottom) - 390px))
+    );
   }
 }
 

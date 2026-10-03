@@ -198,11 +198,13 @@ class RecipeController extends Controller
             }
 
             $ingredientIds[] = $ingredient->id;
+            $unit = $ingredientData['unit'] ?? null;
             $prepared[] = [
                 'ingredient_id' => $ingredient->id,
-                'value' => $ingredientData['value'] ?? null,
-                'unit' => $ingredientData['unit'] ?? null,
+                'value' => $unit === 'to_taste' ? null : ($ingredientData['value'] ?? null),
+                'unit' => $unit,
                 'raw_text' => $ingredientData['raw_text'] ?? null,
+                'needs_review' => $unit !== $ingredient->default_unit,
             ];
         }
 
