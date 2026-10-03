@@ -220,6 +220,7 @@ export function validateRecipeDraft(
     }
 
     if (
+      ingredient.unit !== 'to_taste' &&
       numericValue !== null &&
       (!Number.isFinite(numericValue) || numericValue < 0 || numericValue > 999999999.999)
     ) {
@@ -254,7 +255,7 @@ export function buildRecipePayload(
       }
 
       const shared = {
-        value: parseIngredientValue(ingredient.value),
+        value: ingredient.unit === 'to_taste' ? null : parseIngredientValue(ingredient.value),
         unit: ingredient.unit,
         raw_text: ingredient.rawText || null,
       }

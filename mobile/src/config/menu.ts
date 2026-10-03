@@ -2,6 +2,8 @@ export type MenuRouteName =
   | 'home'
   | 'recipes'
   | 'recipe-create'
+  | 'shopping-list'
+  | 'shopping-lists'
   | 'admin-ingredients'
   | 'admin-recipe-reviews'
 
@@ -70,11 +72,11 @@ export const MENU_SECTIONS: MenuSection[] = [
     items: [
       {
         id: 'shopping',
-        label: 'Shopping',
-        routeName: null,
+        label: 'Liste de cumpărături',
+        routeName: 'shopping-lists',
         markerClass: 'drawer-link__mark--turquoise',
         restricted: false,
-        soon: true,
+        soon: false,
       },
     ],
   },

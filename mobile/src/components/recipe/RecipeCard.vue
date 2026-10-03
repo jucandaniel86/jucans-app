@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 
 import jucansPlaceholder from '@/assets/jucans_logo.png'
 import UserAvatar from '@/components/user/UserAvatar.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import { useAddRecipeToShoppingList } from '@/composables/useAddRecipeToShoppingList'
 import type { RecipeSummary } from '@/types/food'
 import { recipeSourceLabel } from '@/utils/recipePresentation'
 import { useAuthStore } from '@/stores/auth'
@@ -16,6 +18,8 @@ const router = useRouter()
 const visibleTags = computed(() => props.recipe.tags.slice(0, 3))
 const remainingTags = computed(() => Math.max(0, props.recipe.tags.length - 3))
 const authStore = useAuthStore()
+const { adding, shoppingMessage, shoppingError, reviewNames, addToList } =
+  useAddRecipeToShoppingList(() => props.recipe.id)
 
 function openRecipe(): void {
   router.push({ name: 'recipe-detail', params: { id: props.recipe.id } })
@@ -73,13 +77,33 @@ function editRecipe(): void {
         <span v-if="remainingTags">+{{ remainingTags }}</span>
       </div>
 
-      <div class="recipe-card__creator">
-        <UserAvatar
-          :avatar="recipe.creator.avatar"
-          :username="recipe.creator.username"
-          size="small"
-        />
-        <span>{{ recipe.creator.username }}</span>
+      <div class="recipe-card__footer">
+        <div class="recipe-card__creator">
+          <UserAvatar
+            :avatar="recipe.creator.avatar"
+            :username="recipe.creator.username"
+            size="small"
+          />
+          <span>{{ recipe.creator.username }}</span>
+        </div>
+        <AppButton
+          class="recipe-card__shopping-button"
+          variant="secondary"
+          :loading="adding"
+          :aria-label="`Adaugă ${recipe.name} la lista de cumpărături`"
+          title="Adaugă la lista de cumpărături"
+          @click.stop="addToList"
+          @keydown.stop
+        >
+          <span aria-hidden="true">🛒</span>
+        </AppButton>
+      </div>
+      <p v-if="shoppingMessage" class="recipe-card__shopping-success" role="status" @click.stop>
+        {{ shoppingMessage }}
+      </p>
+      <div v-if="shoppingError" class="recipe-card__shopping-error" role="alert" @click.stop>
+        <p>{{ shoppingError }}</p>
+        <small v-if="reviewNames.length">{{ reviewNames.join(' · ') }}</small>
       </div>
     </div>
   </article>
@@ -204,6 +228,61 @@ function editRecipe(): void {
   color: var(--color-text-muted);
   font-size: 0.78rem;
   font-weight: 700;
+  min-width: 0;
+}
+
+.recipe-card__creator span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recipe-card__creator :deep(.user-avatar) {
+  flex-shrink: 0;
+}
+
+.recipe-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: auto;
+}
+
+.recipe-card__shopping-button {
+  flex: 0 0 44px;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--color-primary-strong);
+  background: var(--color-primary-soft);
+  font-size: 1.1rem;
+}
+
+.recipe-card__shopping-button :deep(.app-button__spinner) {
+  border-color: var(--color-primary);
+  border-top-color: var(--color-primary-strong);
+}
+
+.recipe-card__shopping-success,
+.recipe-card__shopping-error {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.recipe-card__shopping-success {
+  color: var(--color-success);
+}
+
+.recipe-card__shopping-error {
+  color: var(--color-error);
+}
+
+.recipe-card__shopping-error p {
+  margin: 0;
 }
 
 @media (max-width: 390px) {

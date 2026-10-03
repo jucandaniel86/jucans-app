@@ -23,20 +23,37 @@ const loadError = ref('')
 const isEdit = computed(() => route.name === 'recipe-edit')
 const recipeId = computed(() => (isEdit.value ? Number(route.params.id) : null))
 
-const canSave = computed(() => {
-  if (
-    draft.loadingOptions.value ||
-    draft.saving.value ||
-    Object.keys(draft.units.value).length === 0
-  ) {
-    return false
-  }
+const validation = computed(() =>
+  validateRecipeDraft(draft.recipe, draft.reviewIngredients.value, Object.keys(draft.units.value)),
+)
+const canSave = computed(
+  () =>
+    !draft.loadingOptions.value &&
+    !draft.saving.value &&
+    Object.keys(draft.units.value).length > 0 &&
+    !draft.imageError.value &&
+    validation.value.valid,
+)
+const visibleIngredientErrors = computed(() => ({
+  ...(draft.loadingOptions.value ? {} : validation.value.ingredients),
+  ...draft.ingredientErrors.value,
+}))
+const saveBlockers = computed(() => {
+  if (draft.loadingOptions.value) return ['Se încarcă unitățile și tag-urile.']
+  if (Object.keys(draft.units.value).length === 0)
+    return ['Unitățile nu sunt disponibile. Încearcă din nou încărcarea lor.']
 
-  return validateRecipeDraft(
-    draft.recipe,
-    draft.reviewIngredients.value,
-    Object.keys(draft.units.value),
-  ).valid
+  return [
+    validation.value.name,
+    validation.value.url,
+    draft.imageError.value,
+    ...draft.reviewIngredients.value.flatMap((ingredient) =>
+      Object.entries(validation.value.ingredients[ingredient.key] ?? {}).map(
+        ([field, message]) =>
+          `${ingredient.name || 'Ingredient fără nume'}: ${field === 'unit' ? `unitatea „${ingredient.unit}” nu este acceptată. Alege o unitate validă.` : message}`,
+      ),
+    ),
+  ].filter(Boolean)
 })
 
 onMounted(async () => {
@@ -90,7 +107,8 @@ async function saveRecipe(): Promise<void> {
     if (route.query.returnTo === 'admin-recipe-reviews') {
       await router.replace({
         name: 'admin-recipe-reviews',
-        query: typeof route.query.reviewSearch === 'string' ? { search: route.query.reviewSearch } : {},
+        query:
+          typeof route.query.reviewSearch === 'string' ? { search: route.query.reviewSearch } : {},
       })
     } else {
       await router.replace({ name: 'recipe-detail', params: { id: recipeId.value } })
@@ -253,7 +271,7 @@ async function saveRecipe(): Promise<void> {
         <IngredientReviewList
           :ingredients="draft.reviewIngredients.value"
           :units="draft.unitOptions.value"
-          :errors="draft.ingredientErrors.value"
+          :errors="visibleIngredientErrors"
           :associating-key="draft.associatingKey.value"
           :association-errors="draft.associationErrors.value"
           @update="draft.updateIngredient"
@@ -277,6 +295,17 @@ async function saveRecipe(): Promise<void> {
     </section>
 
     <div class="recipe-save">
+      <div
+        v-if="saveBlockers.length && !draft.saving.value"
+        class="recipe-save__error"
+        role="status"
+        aria-live="polite"
+      >
+        <p>Salvarea nu este disponibilă:</p>
+        <ul>
+          <li v-for="reason in saveBlockers" :key="reason">{{ reason }}</li>
+        </ul>
+      </div>
       <p v-if="draft.saveError.value" class="recipe-save__error" role="alert">
         {{ draft.saveError.value }}
       </p>
@@ -492,6 +521,17 @@ async function saveRecipe(): Promise<void> {
   font-size: 0.82rem;
   font-weight: 650;
   text-align: center;
+}
+
+.recipe-save__error p {
+  margin: 0;
+}
+
+.recipe-save__error ul {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .recipe-success {

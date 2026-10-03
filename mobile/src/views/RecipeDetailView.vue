@@ -6,6 +6,7 @@ import jucansPlaceholder from '@/assets/jucans_logo.png'
 import AppButton from '@/components/ui/AppButton.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
 import { foodApi } from '@/services/foodApi'
+import { useAddRecipeToShoppingList } from '@/composables/useAddRecipeToShoppingList'
 import type { FoodUnit, RecipeDetail } from '@/types/food'
 import { recipeIngredientLabel, recipeSourceLabel } from '@/utils/recipePresentation'
 
@@ -15,6 +16,8 @@ const recipe = ref<RecipeDetail | null>(null)
 const units = ref<Record<string, FoodUnit>>({})
 const loading = ref(true)
 const error = ref('')
+const { adding, shoppingMessage, shoppingError, reviewNames, addToList } =
+  useAddRecipeToShoppingList(() => recipe.value?.id ?? null)
 
 async function loadRecipe(): Promise<void> {
   const recipeId = Number(route.params.id)
@@ -100,6 +103,20 @@ onMounted(loadRecipe)
         <span>Adăugată de {{ recipe.creator.username }}</span>
       </div>
 
+      <div class="recipe-detail__shopping">
+        <AppButton variant="secondary" :loading="adding" @click="addToList">
+          <span aria-hidden="true">🛒</span> Adaugă la listă
+        </AppButton>
+        <RouterLink :to="{ name: 'shopping-list' }">Deschide lista</RouterLink>
+        <p v-if="shoppingMessage" class="recipe-detail__shopping-success" role="status">
+          {{ shoppingMessage }}
+        </p>
+        <div v-if="shoppingError" class="recipe-detail__shopping-error" role="alert">
+          <p>{{ shoppingError }}</p>
+          <small v-if="reviewNames.length">{{ reviewNames.join(' · ') }}</small>
+        </div>
+      </div>
+
       <section v-if="recipe.description" class="recipe-detail__section">
         <h2>Despre rețetă</h2>
         <p class="recipe-detail__description">{{ recipe.description }}</p>
@@ -112,9 +129,9 @@ onMounted(loadRecipe)
             <span aria-hidden="true" />
             <div>
               <strong>{{ recipeIngredientLabel(ingredient, units) }}</strong>
-              <small
-                v-if="ingredient.value !== null && ingredient.raw_text"
-              >{{ ingredient.raw_text }}</small>
+              <small v-if="ingredient.value !== null && ingredient.raw_text">{{
+                ingredient.raw_text
+              }}</small>
             </div>
           </li>
         </ul>
@@ -136,6 +153,40 @@ onMounted(loadRecipe)
 </template>
 
 <style scoped>
+.recipe-detail__shopping {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.recipe-detail__shopping :deep(.app-button) {
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border-radius: 8px;
+}
+.recipe-detail__shopping a {
+  padding: var(--space-2) 0;
+  color: var(--color-primary-strong);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.recipe-detail__shopping-success,
+.recipe-detail__shopping-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.recipe-detail__shopping-success {
+  color: var(--color-success);
+}
+.recipe-detail__shopping-error {
+  color: var(--color-error);
+}
+.recipe-detail__shopping-error p {
+  margin: 0;
+}
 .recipe-detail {
   display: grid;
   gap: var(--space-5);

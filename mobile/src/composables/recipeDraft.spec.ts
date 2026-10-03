@@ -208,6 +208,17 @@ describe('recipe ingredient draft mapping', () => {
 })
 
 describe('recipe payload and validation', () => {
+  it('saves to-taste ingredients without a numeric quantity while preserving identity and raw text', () => {
+    const ingredients = mapRecipeIngredients([
+      { id: 17, name: 'Sare', value: '2.000', unit: 'to_taste', raw_text: 'sare după gust' },
+    ])
+    ingredients[0]!.value = 'mult'
+    expect(validateRecipeDraft(recipe, ingredients, ['to_taste']).valid).toBe(true)
+    expect(buildRecipePayload(recipe, ingredients).ingredients).toEqual([
+      { ingredient_id: 17, value: null, unit: 'to_taste', raw_text: 'sare după gust' },
+    ])
+  })
+
   it('builds mixed existing and new ingredient payloads while preserving raw text', () => {
     const ingredients: IngredientReviewDraft[] = [
       {

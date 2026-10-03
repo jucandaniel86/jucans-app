@@ -6,6 +6,36 @@ import { describe, expect, it } from 'vitest'
 import IngredientReviewCard from '@/components/recipe/IngredientReviewCard.vue'
 
 describe('IngredientReviewCard', () => {
+  it('hides the numeric quantity for to taste and restores it for measured units', async () => {
+    const item = {
+      key: 'salt',
+      sourceStatus: 'matched' as const,
+      resolution: 'existing' as const,
+      ingredientId: 3,
+      name: 'Sare',
+      value: '2',
+      unit: 'to_taste',
+      rawText: 'sare după gust',
+      candidates: [],
+    }
+    const wrapper = mount(IngredientReviewCard, {
+      props: {
+        item,
+        index: 0,
+        units: [
+          { value: 'to_taste', label: 'După gust' },
+          { value: 'gram', label: 'Grame' },
+        ],
+        associationSaving: false,
+        associationError: '',
+      },
+    })
+    expect(wrapper.find('input').exists()).toBe(false)
+    expect(wrapper.find('select').element.value).toBe('to_taste')
+    await wrapper.setProps({ item: { ...item, unit: 'gram' } })
+    expect(wrapper.find('input').element.value).toBe('2')
+  })
+
   it('highlights an ingredient with a form-level API error and keeps its unit editable', async () => {
     const wrapper = mount(IngredientReviewCard, {
       props: {

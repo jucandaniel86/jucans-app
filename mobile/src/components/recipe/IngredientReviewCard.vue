@@ -149,8 +149,12 @@ watch(
       @select="$emit('associate', $event)"
     />
 
-    <div class="ingredient-card__measurements">
+    <div
+      class="ingredient-card__measurements"
+      :class="{ 'ingredient-card__measurements--to-taste': item.unit === 'to_taste' }"
+    >
       <AppInput
+        v-if="item.unit !== 'to_taste'"
         :model-value="item.value"
         label="Cantitate"
         inputmode="decimal"
@@ -303,6 +307,10 @@ watch(
   display: grid;
   grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
   gap: var(--space-3);
+}
+
+.ingredient-card__measurements--to-taste {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .ingredient-card__error {

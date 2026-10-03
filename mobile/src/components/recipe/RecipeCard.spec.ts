@@ -1,11 +1,17 @@
 // @vitest-environment happy-dom
 
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '@/services/api'
 
 const routerMocks = vi.hoisted(() => ({
   push: vi.fn<(location: unknown) => void>(),
+}))
+const shoppingMocks = vi.hoisted(() => ({ addRecipe: vi.fn() }))
+vi.mock('@/services/shoppingApi', () => ({ shoppingApi: shoppingMocks }))
+vi.mock('@/stores/activeShoppingList', () => ({
+  useActiveShoppingListStore: () => ({ addRecipe: shoppingMocks.addRecipe }),
 }))
 
 vi.mock('vue-router', () => ({
@@ -38,6 +44,7 @@ describe('RecipeCard', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     routerMocks.push.mockReset()
+    shoppingMocks.addRecipe.mockReset().mockResolvedValue({ data: { already_present: false } })
   })
 
   it('shows the fallback, three tags and the remaining count', () => {
@@ -77,5 +84,66 @@ describe('RecipeCard', () => {
       name: 'recipe-edit',
       params: { id: 12 },
     })
+  })
+
+  it('adds the recipe from the author row without opening the card', async () => {
+    const wrapper = mount(RecipeCard, { props: { recipe } })
+    const button = wrapper.find('.recipe-card__footer button')
+    expect(button.attributes('aria-label')).toContain(recipe.name)
+    await button.trigger('keydown', { key: 'Enter' })
+    await button.trigger('click')
+    await flushPromises()
+
+    expect(shoppingMocks.addRecipe).toHaveBeenCalledWith(12)
+    expect(routerMocks.push).not.toHaveBeenCalled()
+    expect(wrapper.find('[role="status"]').text()).toBe('Adăugat în lista de cumpărături')
+  })
+
+  it('prevents duplicate clicks while adding', async () => {
+    let resolve!: (value: unknown) => void
+    shoppingMocks.addRecipe.mockReturnValue(
+      new Promise((done) => {
+        resolve = done
+      }),
+    )
+    const wrapper = mount(RecipeCard, { props: { recipe } })
+    const button = wrapper.find('.recipe-card__footer button')
+    await button.trigger('click')
+    expect(button.attributes('disabled')).toBeDefined()
+    await button.trigger('click')
+    expect(shoppingMocks.addRecipe).toHaveBeenCalledTimes(1)
+    resolve({ data: { already_present: false } })
+    await flushPromises()
+    expect(button.attributes('disabled')).toBeUndefined()
+    expect(routerMocks.push).not.toHaveBeenCalled()
+  })
+
+  it('shows feedback when the recipe is already present', async () => {
+    shoppingMocks.addRecipe.mockResolvedValue({ data: { already_present: true } })
+    const wrapper = mount(RecipeCard, { props: { recipe } })
+    await wrapper.find('.recipe-card__footer button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[role="status"]').text()).toBe('Rețeta este deja în listă')
+  })
+
+  it('shows review errors with ingredient names and allows retry', async () => {
+    shoppingMocks.addRecipe.mockRejectedValueOnce(
+      new ApiError('Validation', 422, {
+        'recipe_ingredients.17.needs_review': ['Ingredient 9 (Lapte) requires review.'],
+      }),
+    )
+    const wrapper = mount(RecipeCard, { props: { recipe } })
+    const button = wrapper.find('.recipe-card__footer button')
+    await button.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').text()).toContain(
+      'Unele ingrediente necesită verificare.',
+    )
+    expect(wrapper.find('[role="alert"]').text()).toContain('Lapte')
+    await button.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.find('[role="status"]').exists()).toBe(true)
+    expect(routerMocks.push).not.toHaveBeenCalled()
   })
 })

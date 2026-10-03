@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
-import { recipeIngredientLabel, recipeSourceLabel } from '@/utils/recipePresentation'
+import { quantityLabel, recipeIngredientLabel, recipeSourceLabel } from '@/utils/recipePresentation'
 
 describe('recipe presentation', () => {
+  it('displays to taste without a number in recipes and shopping quantities', () => {
+    expect(
+      recipeIngredientLabel(
+        { id: 1, name: 'Sare', value: null, unit: 'to_taste', raw_text: '2 g sare' },
+        {},
+      ),
+    ).toBe('Sare după gust')
+    expect(quantityLabel(null, 'to_taste', {})).toBe('după gust')
+    expect(quantityLabel('5.000', 'to_taste', {})).toBe('după gust')
+  })
+
   it('uses friendly source labels', () => {
     expect(recipeSourceLabel('https://youtu.be/example')).toBe('▶ YouTube')
     expect(recipeSourceLabel('https://www.facebook.com/example')).toBe('Facebook')

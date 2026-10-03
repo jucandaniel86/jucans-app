@@ -43,6 +43,7 @@ describe('AppDrawer', () => {
       { name: 'home' },
       { name: 'recipes' },
       { name: 'recipe-create' },
+      { name: 'shopping-lists' },
     ])
     expect(disabledItems).toHaveLength(
       configuredItems.filter((item) => item.restricted || item.soon || !item.routeName).length,
@@ -62,6 +63,7 @@ describe('AppDrawer', () => {
       { name: 'home' },
       { name: 'recipes' },
       { name: 'recipe-create' },
+      { name: 'shopping-lists' },
       { name: 'admin-ingredients' },
       { name: 'admin-recipe-reviews' },
     ])
