@@ -5,6 +5,9 @@ import { createPinia } from 'pinia'
 
 import App from './App.vue'
 import router from './router'
+import { configureNativeViewport } from './utils/nativeViewport'
+
+configureNativeViewport()
 
 const app = createApp(App)
 

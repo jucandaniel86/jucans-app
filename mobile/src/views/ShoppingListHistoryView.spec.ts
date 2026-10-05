@@ -61,6 +61,7 @@ describe('shopping list history and closing', () => {
     expect(wrapper.find('input').attributes('disabled')).toBeDefined()
     expect(wrapper.find('input').element).toHaveProperty('checked', true)
     expect(wrapper.find('.shopping-list__close').exists()).toBe(false)
+    expect(wrapper.find('.shopping-quick-add').exists()).toBe(false)
     expect(shopping.list.id).toBe(1)
     expect(mocks.getActive).not.toHaveBeenCalled()
   })

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ShoppingList\StoreManualShoppingListItemRequest;
 use App\Http\Requests\ShoppingList\UpdateShoppingListItemRequest;
 use App\Http\Resources\ShoppingListItemResource;
 use App\Http\Resources\ShoppingListRecipeResource;
@@ -38,7 +39,7 @@ class ShoppingListController extends Controller
     {
         $list = $this->lists->accessibleListQuery($request->user())->whereKey($shoppingList->id)->firstOrFail();
 
-        return new ShoppingListResource($this->lists->loadSummaryCounts($list)->load(['items.shoppingCategory', 'items.sources']));
+        return new ShoppingListResource($this->lists->loadSummaryCounts($list, $request->user())->load(['items.shoppingCategory', 'items.sources']));
     }
 
     public function close(Request $request): ShoppingListResource|JsonResponse
@@ -50,20 +51,23 @@ class ShoppingListController extends Controller
 
     public function active(Request $request): ShoppingListResource|JsonResponse
     {
-        $shoppingList = $this->lists->activeListQuery($request->user())->first();
+        $shoppingList = $this->lists->resolveActiveList($request->user());
 
         if ($shoppingList === null) {
             return response()->json(['data' => null]);
         }
 
-        return new ShoppingListResource($this->lists->loadSummaryCounts($shoppingList)->load('items.shoppingCategory'));
+        return new ShoppingListResource($this->lists->loadSummaryCounts($shoppingList, $request->user())->load([
+            'items.shoppingCategory',
+            'recipes' => fn ($query) => $query->orderBy('recipes.id'),
+        ]));
     }
 
     public function store(Request $request): JsonResponse
     {
         [$shoppingList, $created] = $this->lists->getOrCreateActive($request->user());
 
-        return (new ShoppingListResource($this->lists->loadSummaryCounts($shoppingList)))
+        return (new ShoppingListResource($this->lists->loadSummaryCounts($shoppingList, $request->user())))
             ->response()
             ->setStatusCode($created ? 201 : 200);
     }
@@ -74,6 +78,18 @@ class ShoppingListController extends Controller
 
         return (new ShoppingListRecipeResource($result))->response()
             ->setStatusCode($result['already_present'] ? 200 : 201);
+    }
+
+    public function storeItem(StoreManualShoppingListItemRequest $request): JsonResponse
+    {
+        return (new ShoppingListItemResource($this->lists->addManualItem(
+            $request->user(), $request->validated()
+        )))->response()->setStatusCode(201);
+    }
+
+    public function removeRecipe(Request $request, ShoppingList $shoppingList, Recipe $recipe, ShoppingListRecipeService $service): ShoppingListResource
+    {
+        return new ShoppingListResource($service->remove($request->user(), $shoppingList, $recipe));
     }
 
     public function updateItem(UpdateShoppingListItemRequest $request, ShoppingListItem $item): ShoppingListItemResource

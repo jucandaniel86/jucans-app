@@ -1,4 +1,14 @@
-import type { RecipeSummary, ShoppingCategory, PaginationMeta } from '@/types/food'
+import type { RecipeSummary, ShoppingCategory, PaginationMeta, FoodTag } from '@/types/food'
+
+export type ShoppingListTab = 'shopping' | 'recipes'
+
+export interface ShoppingListRecipe {
+  id: number
+  name: string
+  image_url?: string | null
+  url?: string | null
+  tags?: FoodTag[]
+}
 
 export interface ShoppingListsResponse {
   data: ShoppingListSummary[]
@@ -18,6 +28,12 @@ export interface ShoppingItem {
   sources?: { id: number; recipe_id: number; quantity: string | null; unit: string | null }[]
 }
 
+export interface ManualShoppingItemInput {
+  name: string
+  quantity: number | null
+  unit: string | null
+}
+
 export interface ShoppingListSummary {
   id: number
   name: string | null
@@ -33,6 +49,11 @@ export interface ShoppingListSummary {
 
 export interface ActiveShoppingList extends ShoppingListSummary {
   items: ShoppingItem[]
+  recipes?: ShoppingListRecipe[]
+}
+
+export interface ShoppingListRemovalResult extends ActiveShoppingList {
+  recipes: ShoppingListRecipe[]
 }
 
 export interface ShoppingRecipeResult extends ShoppingListSummary {

@@ -16,6 +16,101 @@ class ShoppingListItemApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_authenticated_user_can_add_manual_item_to_accessible_active_open_list(): void
+    {
+        $owner = User::create(['username' => 'owner', 'pin' => '1234']);
+        $user = User::create(['username' => 'shopper', 'pin' => '1234']);
+        $list = ShoppingList::create(['created_by' => $owner->id, 'status' => 'open', 'visibility' => 'shared']);
+        $list->users()->attach($user->id);
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson('/api/shopping-lists/active/items', [
+            'name' => '  Dero  ',
+            'quantity' => 1,
+            'unit' => 'buc',
+        ])->assertCreated()
+            ->assertJsonPath('data.ingredient_id', null)
+            ->assertJsonPath('data.name', 'Dero')
+            ->assertJsonPath('data.quantity', '1.000')
+            ->assertJsonPath('data.unit', 'buc')
+            ->assertJsonPath('data.calculated_quantity', null)
+            ->assertJsonPath('data.shopping_category', null)
+            ->assertJsonPath('data.is_checked', false)
+            ->assertJsonPath('data.quantity_overridden', true);
+
+        $itemId = $response->json('data.id');
+        $this->assertDatabaseHas('shopping_list_items', [
+            'id' => $itemId,
+            'shopping_list_id' => $list->id,
+            'ingredient_id' => null,
+            'name' => 'Dero',
+            'quantity' => '1.000',
+            'unit' => 'buc',
+            'shopping_category_id' => null,
+            'is_checked' => false,
+            'quantity_overridden' => true,
+        ]);
+        $this->assertDatabaseMissing('shopping_list_item_sources', ['shopping_list_item_id' => $itemId]);
+
+        $this->getJson('/api/shopping-lists/active')->assertOk()
+            ->assertJsonPath('data.id', $list->id)
+            ->assertJsonPath('data.items.0.id', $itemId)
+            ->assertJsonPath('data.items.0.name', 'Dero')
+            ->assertJsonPath('data.items.0.shopping_category', null)
+            ->assertJsonPath('data.items_count', 1)
+            ->assertJsonPath('data.unchecked_items_count', 1);
+    }
+
+    public function test_manual_item_can_be_created_without_quantity_or_unit(): void
+    {
+        $user = User::create(['username' => 'shopper', 'pin' => '1234']);
+        $list = ShoppingList::create(['created_by' => $user->id, 'status' => 'open', 'visibility' => 'private']);
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson('/api/shopping-lists/active/items', [
+            'name' => 'Servetele',
+        ])->assertCreated()
+            ->assertJsonPath('data.name', 'Servetele')
+            ->assertJsonPath('data.quantity', null)
+            ->assertJsonPath('data.unit', null);
+
+        $this->assertDatabaseHas('shopping_list_items', [
+            'id' => $response->json('data.id'),
+            'shopping_list_id' => $list->id,
+            'ingredient_id' => null,
+            'quantity' => null,
+            'unit' => null,
+            'quantity_overridden' => true,
+        ]);
+    }
+
+    public function test_manual_item_cannot_be_added_without_accessible_active_open_list(): void
+    {
+        $user = User::create(['username' => 'shopper', 'pin' => '1234']);
+        ShoppingList::create(['created_by' => $user->id, 'status' => 'closed', 'visibility' => 'private']);
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/shopping-lists/active/items', ['name' => 'Dero'])->assertNotFound();
+
+        $other = User::create(['username' => 'other', 'pin' => '1234']);
+        ShoppingList::create(['created_by' => $other->id, 'status' => 'open', 'visibility' => 'private']);
+
+        $this->postJson('/api/shopping-lists/active/items', ['name' => 'Dero'])->assertNotFound();
+        $this->assertDatabaseCount('shopping_list_items', 0);
+    }
+
+    public function test_manual_item_name_is_required_after_trimming_and_quantity_must_be_positive(): void
+    {
+        $user = User::create(['username' => 'shopper', 'pin' => '1234']);
+        ShoppingList::create(['created_by' => $user->id, 'status' => 'open', 'visibility' => 'private']);
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/shopping-lists/active/items', ['name' => '   '])
+            ->assertUnprocessable()->assertJsonValidationErrors('name');
+        $this->postJson('/api/shopping-lists/active/items', ['name' => 'Dero', 'quantity' => 0])
+            ->assertUnprocessable()->assertJsonValidationErrors('quantity');
+    }
+
     public function test_owner_can_check_uncheck_and_repeat_requests_with_correct_counts(): void
     {
         [$user, $item] = $this->fixture();
@@ -59,6 +154,7 @@ class ShoppingListItemApiTest extends TestCase
     {
         [$owner, $item] = $this->fixture();
         $member = User::create(['username' => 'member', 'pin' => '1234']);
+        $item->shoppingList->update(['visibility' => 'shared']);
         $item->shoppingList->users()->attach($member->id);
         Sanctum::actingAs($member);
         $this->patchJson($this->endpoint($item), ['is_checked' => true])->assertOk();
@@ -84,12 +180,13 @@ class ShoppingListItemApiTest extends TestCase
         $this->assertFalse($item->refresh()->is_checked);
     }
 
-    public function test_item_from_an_older_open_list_is_not_part_of_the_selected_active_list(): void
+    public function test_multiple_accessible_open_lists_require_explicit_selection_before_checking_items(): void
     {
         [$user, $item] = $this->fixture();
         ShoppingList::create(['created_by' => $user->id, 'status' => 'open']);
         Sanctum::actingAs($user);
-        $this->patchJson($this->endpoint($item), ['is_checked' => true])->assertNotFound();
+        $this->patchJson($this->endpoint($item), ['is_checked' => true])->assertConflict();
+        $this->assertFalse($item->refresh()->is_checked);
     }
 
     public function test_checked_value_is_required_and_must_be_boolean(): void

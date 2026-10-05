@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\IngredientController;
 use App\Http\Controllers\Api\IngredientResolverController;
 use App\Http\Controllers\Api\RecipeController;
 use App\Http\Controllers\Api\ShoppingListController;
+use App\Http\Controllers\Api\ShoppingListSharingController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', [AuthController::class, 'login']);
@@ -34,7 +35,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'show']);
     Route::post('/shopping-lists', [ShoppingListController::class, 'store']);
     Route::post('/shopping-lists/active/recipes/{recipe}', [ShoppingListController::class, 'addRecipe']);
+    Route::delete('/shopping-lists/{shoppingList}/recipes/{recipe}', [ShoppingListController::class, 'removeRecipe']);
+    Route::post('/shopping-lists/active/items', [ShoppingListController::class, 'storeItem']);
     Route::patch('/shopping-lists/active/items/{item}', [ShoppingListController::class, 'updateItem']);
+    Route::patch('/shopping-lists/{shoppingList}/visibility', [ShoppingListSharingController::class, 'visibility']);
+    Route::get('/shopping-lists/{shoppingList}/users', [ShoppingListSharingController::class, 'index']);
+    Route::post('/shopping-lists/{shoppingList}/users', [ShoppingListSharingController::class, 'store']);
+    Route::delete('/shopping-lists/{shoppingList}/users/{user}', [ShoppingListSharingController::class, 'destroy']);
 
     Route::prefix('admin')->middleware('admin')->group(function () {
         Route::get('/ingredients', [AdminIngredientController::class, 'index']);

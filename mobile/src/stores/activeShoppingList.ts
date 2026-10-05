@@ -5,7 +5,11 @@ import { foodApi } from '@/services/foodApi'
 import { shoppingApi } from '@/services/shoppingApi'
 import { useAuthStore } from '@/stores/auth'
 import type { FoodUnit } from '@/types/food'
-import type { ActiveShoppingList, ShoppingRecipeResult } from '@/types/shopping'
+import type {
+  ActiveShoppingList,
+  ManualShoppingItemInput,
+  ShoppingRecipeResult,
+} from '@/types/shopping'
 import { shoppingListSummary } from '@/utils/shoppingPresentation'
 
 export const useActiveShoppingListStore = defineStore('active-shopping-list', () => {
@@ -15,7 +19,17 @@ export const useActiveShoppingListStore = defineStore('active-shopping-list', ()
   const error = ref('')
   const loaded = ref(false)
   const closing = ref(false)
+  const addingItem = ref(false)
+  const addingRecipe = ref(false)
+  const removingRecipeId = ref<number | null>(null)
   const pendingChecks = ref<Record<number, boolean>>({})
+  const removalBlocked = computed(
+    () =>
+      closing.value ||
+      addingItem.value ||
+      addingRecipe.value ||
+      Object.keys(pendingChecks.value).length > 0,
+  )
   const itemErrors = ref<Record<number, string>>({})
   const hasItems = computed(() => Boolean(list.value?.items.length))
   const summary = computed(() => (list.value ? shoppingListSummary(list.value) : ''))
@@ -41,6 +55,9 @@ export const useActiveShoppingListStore = defineStore('active-shopping-list', ()
     error.value = ''
     pendingChecks.value = {}
     itemErrors.value = {}
+    addingItem.value = false
+    addingRecipe.value = false
+    removingRecipeId.value = null
   }
 
   function recount(): void {
@@ -67,6 +84,7 @@ export const useActiveShoppingListStore = defineStore('active-shopping-list', ()
     if (
       !item ||
       closing.value ||
+      removingRecipeId.value !== null ||
       list.value?.status === 'closed' ||
       pendingChecks.value[itemId] !== undefined ||
       item.is_checked === checked
@@ -110,7 +128,7 @@ export const useActiveShoppingListStore = defineStore('active-shopping-list', ()
       try {
         const response = await shoppingApi.getActive()
         if (currentRevision !== revision) return
-        list.value = response.data
+        list.value = response.data ? retainRecipes(response.data) : null
         preservePendingChecks()
         if (response.data?.items.length && Object.keys(units.value).length === 0) {
           const config = await foodApi.getConfig()
@@ -143,22 +161,102 @@ export const useActiveShoppingListStore = defineStore('active-shopping-list', ()
         (list.value?.id === result.id ? list.value.items : []).map((item) => [item.id, item]),
       )
       result.items.forEach((item) => items.set(item.id, item))
-      list.value = { ...result, items: [...items.values()] }
+      const recipes = list.value?.id === result.id ? list.value.recipes : undefined
+      const attached = recipes ? new Map(recipes.map((recipe) => [recipe.id, recipe])) : new Map()
+      if (result.recipe) attached.set(result.recipe.id, result.recipe)
+      list.value = {
+        ...result,
+        items: [...items.values()],
+        recipes: attached.size === result.recipes_count ? [...attached.values()] : undefined,
+      }
       preservePendingChecks()
     }
     await load(true)
   }
 
   async function addRecipe(recipeId: number) {
+    if (removingRecipeId.value !== null || addingRecipe.value || closing.value)
+      throw new Error('Shopping list is busy')
     const session = sessionRevision
-    const response = await shoppingApi.addRecipe(recipeId)
-    if (session === sessionRevision) await synchronizeAddition(response.data)
-    return response
+    addingRecipe.value = true
+    try {
+      const response = await shoppingApi.addRecipe(recipeId)
+      if (session === sessionRevision) await synchronizeAddition(response.data)
+      return response
+    } finally {
+      if (session === sessionRevision) addingRecipe.value = false
+    }
+  }
+
+  function retainRecipes(incoming: ActiveShoppingList): ActiveShoppingList {
+    if (incoming.recipes) return incoming
+    if (incoming.recipes_count === 0) return { ...incoming, recipes: [] }
+    // Legacy GET responses omit recipes; retain only a complete known attachment set.
+    const recipes = list.value && list.value.id === incoming.id ? list.value.recipes : undefined
+    return recipes?.length === incoming.recipes_count ? { ...incoming, recipes } : incoming
+  }
+
+  async function removeRecipe(recipeId: number): Promise<void> {
+    if (
+      !list.value ||
+      list.value.status === 'closed' ||
+      removingRecipeId.value !== null ||
+      removalBlocked.value
+    )
+      throw new Error('Shopping list is unavailable')
+    const listId = list.value.id
+    const session = sessionRevision
+    removingRecipeId.value = recipeId
+    try {
+      const response = await shoppingApi.removeRecipe(listId, recipeId)
+      if (session !== sessionRevision || list.value?.id !== listId || response.data.id !== listId)
+        throw new Error('Shopping list changed')
+      invalidateRequests()
+      list.value = response.data
+      loaded.value = true
+      error.value = ''
+      itemErrors.value = {}
+    } finally {
+      if (session === sessionRevision) removingRecipeId.value = null
+    }
+  }
+
+  async function addManualItem(input: ManualShoppingItemInput): Promise<void> {
+    if (
+      !list.value ||
+      list.value.status === 'closed' ||
+      closing.value ||
+      addingItem.value ||
+      removingRecipeId.value !== null
+    )
+      throw new Error('Shopping list is unavailable')
+    const listId = list.value.id
+    const session = sessionRevision
+    addingItem.value = true
+    try {
+      const response = await shoppingApi.addManualItem(input)
+      if (session !== sessionRevision || list.value?.id !== listId)
+        throw new Error('Shopping list changed')
+      invalidateRequests()
+      if (!list.value.items.some((item) => item.id === response.data.id))
+        list.value.items.push(response.data)
+      list.value.items_count = list.value.items.length
+      recount()
+    } finally {
+      if (session === sessionRevision) addingItem.value = false
+    }
   }
 
   const auth = useAuthStore()
   async function closeActive(): Promise<void> {
-    if (closing.value || Object.keys(pendingChecks.value).length) return
+    if (
+      closing.value ||
+      addingItem.value ||
+      addingRecipe.value ||
+      removingRecipeId.value !== null ||
+      Object.keys(pendingChecks.value).length
+    )
+      return
     closing.value = true
     const session = sessionRevision
     try {
@@ -180,6 +278,10 @@ export const useActiveShoppingListStore = defineStore('active-shopping-list', ()
     error,
     loaded,
     closing,
+    addingItem,
+    addingRecipe,
+    removingRecipeId,
+    removalBlocked,
     hasItems,
     summary,
     remainingSummary,
@@ -188,6 +290,8 @@ export const useActiveShoppingListStore = defineStore('active-shopping-list', ()
     load,
     reset,
     addRecipe,
+    removeRecipe,
+    addManualItem,
     setChecked,
     closeActive,
   }

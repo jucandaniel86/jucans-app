@@ -39,7 +39,7 @@ export function quantityLabel(
     ? new Intl.NumberFormat('ro-RO', { maximumFractionDigits: 3 }).format(numericValue)
     : quantity
   const unit = storedUnit ? units[storedUnit] : undefined
-  const unitLabel = unit?.label || (storedUnit === 'none' ? '' : unit?.name || '')
+  const unitLabel = unit?.label || (storedUnit === 'none' ? '' : unit?.name || storedUnit || '')
 
   return [value, unitLabel].filter(Boolean).join(' ')
 }

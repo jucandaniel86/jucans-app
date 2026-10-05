@@ -89,7 +89,10 @@ onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: var(--space-4);
+  padding: max(var(--space-4), env(safe-area-inset-top, 0px))
+    max(var(--space-4), env(safe-area-inset-right, 0px))
+    max(var(--space-4), env(safe-area-inset-bottom, 0px))
+    max(var(--space-4), env(safe-area-inset-left, 0px));
   background: var(--color-overlay);
 }
 

@@ -1,14 +1,33 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import ShoppingItemGroups from '@/components/shopping/ShoppingItemGroups.vue'
+import ShoppingListQuickAdd from '@/components/shopping/ShoppingListQuickAdd.vue'
+import ShoppingListTabs from '@/components/shopping/ShoppingListTabs.vue'
+import ShoppingListRecipes from '@/components/shopping/ShoppingListRecipes.vue'
+import type { ShoppingListTab } from '@/types/shopping'
 import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
 
 const props = defineProps<{ expanded: boolean }>()
-const emit = defineEmits<{ 'update:expanded': [value: boolean] }>()
+const emit = defineEmits<{
+  'update:expanded': [value: boolean]
+  'occupied-height': [value: number]
+}>()
 const shopping = useActiveShoppingListStore()
+const tab = ref<ShoppingListTab>('shopping')
+const content = ref<HTMLElement | null>(null)
 const panel = ref<HTMLElement | null>(null)
 const toggle = ref<HTMLButtonElement | null>(null)
+let observer: ResizeObserver | undefined
+
+onMounted(() => {
+  if (!panel.value || typeof ResizeObserver === 'undefined') return
+  observer = new ResizeObserver(() => {
+    if (!props.expanded && panel.value)
+      emit('occupied-height', panel.value.getBoundingClientRect().height)
+  })
+  observer.observe(panel.value)
+})
 
 function collapse(): void {
   emit('update:expanded', false)
@@ -20,7 +39,9 @@ function keydown(event: KeyboardEvent): void {
     collapse()
   }
   if (event.key === 'Tab') {
-    const controls = panel.value?.querySelectorAll<HTMLElement>('button, a[href]')
+    const controls = panel.value?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), a[href], input:not(:disabled), [tabindex="0"]',
+    )
     const first = controls?.[0]
     const last = controls?.[controls.length - 1]
     if (event.shiftKey && document.activeElement === first) {
@@ -36,17 +57,22 @@ function keydown(event: KeyboardEvent): void {
 watch(
   () => props.expanded,
   async () => {
+    tab.value = 'shopping'
     await nextTick()
     toggle.value?.focus()
   },
 )
+watch(tab, () => {
+  if (content.value) content.value.scrollTop = 0
+})
 onBeforeUnmount(() => {
+  observer?.disconnect()
   if (props.expanded) collapse()
 })
 </script>
 
 <template>
-  <template v-if="shopping.hasItems">
+  <template v-if="shopping.hasItems || (expanded && shopping.list)">
     <button
       v-if="expanded"
       class="floating-shopping__backdrop"
@@ -64,6 +90,7 @@ onBeforeUnmount(() => {
       aria-label="Lista de cumpărături activă"
       @keydown="keydown"
     >
+      <ShoppingListQuickAdd v-if="!expanded" class="floating-shopping__quick-add--external" />
       <button
         ref="toggle"
         class="floating-shopping__toggle"
@@ -81,11 +108,19 @@ onBeforeUnmount(() => {
         }}</span>
       </button>
       <template v-if="expanded">
+        <ShoppingListTabs
+          v-model="tab"
+          :items-count="shopping.list!.items_count"
+          :recipes-count="shopping.list!.recipes_count"
+          panel-id="shopping-quick-preview"
+        />
         <div
+          ref="content"
           id="shopping-quick-preview"
           class="floating-shopping__items"
           tabindex="0"
-          aria-label="Produsele din listă"
+          role="tabpanel"
+          :aria-labelledby="`shopping-quick-preview-${tab}`"
         >
           <div v-if="shopping.error" class="floating-shopping__error" role="alert">
             <p>{{ shopping.error }}</p>
@@ -93,8 +128,14 @@ onBeforeUnmount(() => {
               Încearcă din nou
             </button>
           </div>
-          <ShoppingItemGroups :items="shopping.list!.items" :units="shopping.units" />
+          <ShoppingListRecipes
+            v-if="tab === 'recipes'"
+            :list="shopping.list!"
+            @open-recipe="collapse"
+          />
+          <ShoppingItemGroups v-else :items="shopping.list!.items" :units="shopping.units" />
         </div>
+        <ShoppingListQuickAdd v-if="tab === 'shopping'" />
         <RouterLink
           class="floating-shopping__open"
           :to="{ name: 'shopping-list' }"
@@ -132,6 +173,22 @@ onBeforeUnmount(() => {
 .floating-shopping--expanded {
   max-height: 65vh;
   max-height: 65dvh;
+}
+.floating-shopping__quick-add--external {
+  border-top: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-primary-soft);
+}
+.floating-shopping:has(.shopping-quick-add form) {
+  max-height: calc(
+    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px
+  );
+}
+.floating-shopping :deep(.shopping-quick-add) {
+  max-height: calc(
+    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 180px
+  );
+  overflow-y: auto;
 }
 .floating-shopping__toggle {
   display: flex;

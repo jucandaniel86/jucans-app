@@ -34,7 +34,12 @@ async function changeChecked(event: Event): Promise<void> {
         :id="`shopping-item-${item.id}`"
         type="checkbox"
         :checked="item.is_checked"
-        :disabled="readonly || shopping.closing || shopping.pendingChecks[item.id] !== undefined"
+        :disabled="
+          readonly ||
+          shopping.closing ||
+          shopping.removingRecipeId !== null ||
+          shopping.pendingChecks[item.id] !== undefined
+        "
         :aria-label="`${item.is_checked ? 'Marchează ca necumpărat' : 'Marchează ca cumpărat'}: ${item.name}`"
         @change="changeChecked"
       />

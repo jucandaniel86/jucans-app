@@ -6,6 +6,8 @@ import type {
   ShoppingItem,
   ShoppingListsResponse,
   ShoppingListSummary,
+  ManualShoppingItemInput,
+  ShoppingListRemovalResult,
 } from '@/types/shopping'
 
 export const shoppingApi = {
@@ -24,6 +26,14 @@ export const shoppingApi = {
 
   addRecipe(recipeId: number): Promise<ResourceItem<ShoppingRecipeResult>> {
     return api.post(`/shopping-lists/active/recipes/${recipeId}`)
+  },
+
+  removeRecipe(listId: number, recipeId: number): Promise<ResourceItem<ShoppingListRemovalResult>> {
+    return api.delete(`/shopping-lists/${listId}/recipes/${recipeId}`)
+  },
+
+  addManualItem(input: ManualShoppingItemInput): Promise<ResourceItem<ShoppingItem>> {
+    return api.post('/shopping-lists/active/items', input)
   },
 
   setItemChecked(itemId: number, checked: boolean): Promise<ResourceItem<ShoppingItem>> {

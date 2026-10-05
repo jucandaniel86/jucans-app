@@ -49,7 +49,7 @@ class ShoppingListApiTest extends TestCase
             'status' => 'open',
             'visibility' => 'private',
         ]);
-        $this->assertDatabaseHas('shopping_list_users', [
+        $this->assertDatabaseMissing('shopping_list_users', [
             'shopping_list_id' => $listId,
             'user_id' => $user->id,
         ]);
@@ -64,7 +64,34 @@ class ShoppingListApiTest extends TestCase
         $this->getJson('/api/shopping-lists/active')
             ->assertOk()
             ->assertJsonPath('data.id', $list->id)
-            ->assertJsonPath('data.created_by', $creator->id);
+            ->assertJsonPath('data.created_by', $creator->id)
+            ->assertJsonPath('data.recipes', []);
+    }
+
+    public function test_active_list_returns_only_attached_recipes_including_recipes_without_items(): void
+    {
+        $creator = $this->createUser('creator');
+        $list = $this->createList($creator);
+        $first = $creator->recipes()->create(['name' => 'Supă', 'url' => 'https://example.com/supa']);
+        $second = $creator->recipes()->create(['name' => 'Paste']);
+        $creator->recipes()->create(['name' => 'Rețetă neadăugată']);
+        $list->recipes()->attach($second->id, ['added_by' => $creator->id]);
+        $list->recipes()->attach($first->id, ['added_by' => $creator->id]);
+        Sanctum::actingAs($creator);
+
+        $this->getJson('/api/shopping-lists/active')
+            ->assertOk()
+            ->assertJsonPath('data.id', $list->id)
+            ->assertJsonPath('data.recipes_count', 2)
+            ->assertJsonCount(2, 'data.recipes')
+            ->assertJsonPath('data.recipes.0.id', $first->id)
+            ->assertJsonPath('data.recipes.0.name', 'Supă')
+            ->assertJsonPath('data.recipes.0.image_url', null)
+            ->assertJsonPath('data.recipes.0.url', 'https://example.com/supa')
+            ->assertJsonPath('data.recipes.1.id', $second->id)
+            ->assertJsonPath('data.recipes.1.name', 'Paste')
+            ->assertJsonPath('data.items_count', 0)
+            ->assertJsonPath('data.items', []);
     }
 
     public function test_repeated_create_returns_the_existing_open_list(): void
@@ -77,7 +104,7 @@ class ShoppingListApiTest extends TestCase
 
         $this->assertSame($first->json('data.id'), $second->json('data.id'));
         $this->assertDatabaseCount('shopping_lists', 1);
-        $this->assertDatabaseCount('shopping_list_users', 1);
+        $this->assertDatabaseCount('shopping_list_users', 0);
     }
 
     public function test_attached_user_can_retrieve_a_shared_open_list_with_summary_counts(): void
@@ -85,7 +112,7 @@ class ShoppingListApiTest extends TestCase
         $creator = $this->createUser('creator');
         $sharedUser = $this->createUser('shared');
         $recipe = $creator->recipes()->create(['name' => 'Supă']);
-        $list = $this->createList($creator);
+        $list = $this->createList($creator, ['visibility' => 'shared']);
         $list->users()->attach($sharedUser->id);
         $list->recipes()->attach($recipe->id, ['added_by' => $creator->id]);
         $list->items()->createMany([
@@ -98,6 +125,9 @@ class ShoppingListApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.id', $list->id)
             ->assertJsonPath('data.recipes_count', 1)
+            ->assertJsonCount(1, 'data.recipes')
+            ->assertJsonPath('data.recipes.0.id', $recipe->id)
+            ->assertJsonPath('data.recipes.0.name', 'Supă')
             ->assertJsonPath('data.items_count', 2)
             ->assertJsonPath('data.unchecked_items_count', 1);
     }

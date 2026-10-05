@@ -12,9 +12,10 @@ const authStore = useAuthStore()
 const shopping = useActiveShoppingListStore()
 const route = useRoute()
 const shoppingExpanded = ref(false)
+const shoppingHeight = ref(120)
 const showShopping = computed(
   () =>
-    shopping.hasItems &&
+    (shopping.hasItems || (shoppingExpanded.value && shopping.list !== null)) &&
     !drawerOpen.value &&
     route.name !== 'shopping-list' &&
     !route.meta.shoppingDetail &&
@@ -77,16 +78,28 @@ async function updateAvatar(nextAvatar: string): Promise<void> {
   <div class="app-layout">
     <div
       class="app-layout__page"
+      :class="{ 'app-layout__page--shopping-detail': route.meta.shoppingDetail }"
       :inert="drawerOpen || shoppingExpanded ? true : undefined"
       :aria-hidden="drawerOpen || shoppingExpanded"
     >
       <AppHeader :username="username" :avatar="avatar" @open-menu="drawerOpen = true" />
-      <main class="app-layout__content" :class="{ 'app-layout__content--shopping': showShopping }">
+      <main
+        class="app-layout__content"
+        :class="{
+          'app-layout__content--shopping': showShopping,
+          'app-layout__content--shopping-detail': route.meta.shoppingDetail,
+        }"
+        :style="{ '--shopping-height': `${shoppingHeight}px` }"
+      >
         <RouterView />
       </main>
     </div>
 
-    <FloatingShoppingList v-if="showShopping" v-model:expanded="shoppingExpanded" />
+    <FloatingShoppingList
+      v-if="showShopping"
+      v-model:expanded="shoppingExpanded"
+      @occupied-height="shoppingHeight = $event"
+    />
 
     <AppDrawer
       :open="drawerOpen"
@@ -120,7 +133,35 @@ async function updateAvatar(nextAvatar: string): Promise<void> {
 }
 
 .app-layout__content--shopping {
-  padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--shopping-height) + 32px + env(safe-area-inset-bottom, 0px));
+}
+
+.app-layout__page--shopping-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-layout__page--shopping-detail > :deep(.app-header) {
+  flex-shrink: 0;
+}
+
+.app-layout__content--shopping-detail {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding-top: var(--space-4);
+  padding-bottom: max(var(--space-3), env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-height: 500px) {
+  .app-layout__content--shopping-detail {
+    padding-top: var(--space-1);
+    padding-bottom: max(var(--space-1), env(safe-area-inset-bottom, 0px));
+  }
 }
 
 @media (max-width: 359px) {

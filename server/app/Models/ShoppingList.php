@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -9,6 +10,25 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ShoppingList extends Model
 {
+    public const VISIBILITIES = ['private', 'shared', 'public'];
+
+    public function scopeAccessibleTo(Builder $query, User $user): Builder
+    {
+        return $query->where(function (Builder $query) use ($user): void {
+            $query->where('created_by', $user->id)
+                ->orWhere('visibility', 'public')
+                ->orWhere(function (Builder $query) use ($user): void {
+                    $query->where('visibility', 'shared')
+                        ->whereHas('users', fn (Builder $query) => $query->whereKey($user->id));
+                });
+        });
+    }
+
+    public function isAccessibleTo(User $user): bool
+    {
+        return static::query()->accessibleTo($user)->whereKey($this->id)->exists();
+    }
+
     protected $fillable = [
         'name',
         'status',

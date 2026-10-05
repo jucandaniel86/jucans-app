@@ -42,7 +42,8 @@ defineEmits<{
   position: sticky;
   z-index: 20;
   top: 0;
-  padding-top: env(safe-area-inset-top);
+  /* Keep the full control row below the status bar, including while sticky. */
+  padding-top: env(safe-area-inset-top, 0px);
   border-bottom: 1px solid rgb(230 225 216 / 72%);
   background: rgb(255 248 236 / 92%);
   backdrop-filter: blur(16px);
@@ -53,7 +54,8 @@ defineEmits<{
   width: min(100%, 640px);
   min-height: 62px;
   margin: 0 auto;
-  padding: 0 var(--space-4);
+  padding: 0 max(var(--space-4), env(safe-area-inset-right, 0px)) 0
+    max(var(--space-4), env(safe-area-inset-left, 0px));
   grid-template-columns: 48px minmax(0, 1fr) minmax(60px, auto);
   align-items: center;
 }

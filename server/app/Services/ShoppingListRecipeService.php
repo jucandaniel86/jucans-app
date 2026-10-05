@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Models\Recipe;
+use App\Models\ShoppingList;
 use App\Models\ShoppingListItem;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 class ShoppingListRecipeService
@@ -17,7 +19,10 @@ class ShoppingListRecipeService
         return DB::transaction(function () use ($user, $recipe): array {
             $user = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
             // The list lock also serializes additions made by different shared-list members.
-            $list = $this->lists->activeListQuery($user)->lockForUpdate()->first();
+            $list = $this->lists->resolveActiveList($user, true);
+            if ($list !== null) {
+                Gate::forUser($user)->authorize('update', $list);
+            }
             $alreadyPresent = $list !== null && $list->recipes()->whereKey($recipe->id)->exists();
 
             if (! $alreadyPresent) {
@@ -77,12 +82,51 @@ class ShoppingListRecipeService
             }
 
             return [
-                'list' => $this->lists->loadSummaryCounts($list),
+                'list' => $this->lists->loadSummaryCounts($list, $user),
                 'recipe' => $recipe,
                 'already_present' => $alreadyPresent,
                 'items' => $list->items()->whereHas('sources', fn ($query) => $query->where('recipe_id', $recipe->id))
                     ->with(['shoppingCategory', 'sources'])->orderBy('id')->get(),
             ];
+        });
+    }
+
+    public function remove(User $user, ShoppingList $list, Recipe $recipe): ShoppingList
+    {
+        return DB::transaction(function () use ($user, $list, $recipe): ShoppingList {
+            $list = ShoppingList::query()->whereKey($list->id)->lockForUpdate()->firstOrFail();
+            Gate::forUser($user)->authorize('update', $list);
+            abort_unless($list->recipes()->whereKey($recipe->id)->exists(), 404, 'Recipe is not attached to this shopping list.');
+
+            $items = $list->items()->whereHas('sources', fn ($query) => $query->where('recipe_id', $recipe->id))
+                ->with('ingredient')->orderBy('id')->lockForUpdate()->get();
+            $list->recipes()->detach($recipe->id);
+
+            foreach ($items as $item) {
+                $remaining = $item->sources()->where('recipe_id', '!=', $recipe->id)->orderBy('id')->lockForUpdate()->get();
+                if ($remaining->isNotEmpty()) {
+                    $unit = $this->normalizeUnit($item->unit);
+                    if (($item->ingredient !== null && $unit !== $this->normalizeUnit($item->ingredient->default_unit))
+                        || $remaining->contains(fn ($source) => $this->normalizeUnit($source->unit) !== $unit)) {
+                        throw ValidationException::withMessages([
+                            'items.'.$item->id.'.unit' => 'Remaining shopping contributions do not use the item canonical unit.',
+                        ]);
+                    }
+                }
+
+                $item->sources()->where('recipe_id', $recipe->id)->delete();
+                if ($remaining->isEmpty()) {
+                    $item->delete();
+                } else {
+                    $this->recalculateQuantity($item);
+                }
+            }
+
+            return $this->lists->loadSummaryCounts($list, $user)->load([
+                'items' => fn ($query) => $query->orderBy('id'),
+                'items.shoppingCategory', 'items.sources',
+                'recipes' => fn ($query) => $query->orderBy('recipes.id'),
+            ]);
         });
     }
 

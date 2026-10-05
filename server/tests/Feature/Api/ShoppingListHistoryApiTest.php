@@ -20,7 +20,7 @@ class ShoppingListHistoryApiTest extends TestCase
         $owner = $this->user('owner');
         $older = $this->list($user, ['status' => 'closed', 'closed_at' => '2026-09-21 12:00:00']);
         $open = $this->list($user);
-        $newer = $this->list($owner, ['status' => 'closed', 'closed_at' => '2026-09-28 12:00:00']);
+        $newer = $this->list($owner, ['status' => 'closed', 'visibility' => 'shared', 'closed_at' => '2026-09-28 12:00:00']);
         $newer->users()->attach($user->id);
         $this->list($owner);
         $open->items()->createMany([['name' => 'Milk', 'is_checked' => true], ['name' => 'Thyme']]);
@@ -41,7 +41,7 @@ class ShoppingListHistoryApiTest extends TestCase
         $owner = $this->user('owner');
         Sanctum::actingAs($user);
         foreach (['open', 'closed'] as $status) {
-            $list = $this->list($owner, ['status' => $status, 'closed_at' => $status === 'closed' ? now() : null]);
+            $list = $this->list($owner, ['status' => $status, 'visibility' => 'shared', 'closed_at' => $status === 'closed' ? now() : null]);
             $list->users()->attach($user->id);
             $recipe = $owner->recipes()->create(['name' => 'Recipe']);
             $item = $list->items()->create(['name' => 'Milk', 'quantity' => 2, 'is_checked' => true]);
@@ -95,11 +95,11 @@ class ShoppingListHistoryApiTest extends TestCase
         $this->patchJson('/api/shopping-lists/active/items/'.$item->id, ['is_checked' => false])->assertNotFound();
     }
 
-    public function test_shared_member_can_close_and_recipe_add_creates_new_list_without_mutating_history(): void
+    public function test_only_creator_can_close_and_recipe_add_creates_new_list_without_mutating_shared_history(): void
     {
         $owner = $this->user('owner');
         $user = $this->user('member');
-        $list = $this->list($owner);
+        $list = $this->list($owner, ['visibility' => 'shared']);
         $list->users()->attach($user->id);
         $ingredient = Ingredient::create(['name' => 'Milk', 'default_unit' => 'liter', 'is_shoppable' => true]);
         $recipe = $user->recipes()->create(['name' => 'Recipe']);
@@ -107,7 +107,10 @@ class ShoppingListHistoryApiTest extends TestCase
         Sanctum::actingAs($user);
         $this->postJson('/api/shopping-lists/active/recipes/'.$recipe->id)->assertCreated();
         $before = $list->items()->get()->toArray();
+        $this->postJson('/api/shopping-lists/active/close')->assertForbidden();
+        Sanctum::actingAs($owner);
         $this->postJson('/api/shopping-lists/active/close')->assertOk();
+        Sanctum::actingAs($user);
         $this->assertDatabaseCount('shopping_lists', 1);
         $this->postJson('/api/shopping-lists/active/recipes/'.$recipe->id)->assertCreated();
         $this->assertDatabaseCount('shopping_lists', 2);

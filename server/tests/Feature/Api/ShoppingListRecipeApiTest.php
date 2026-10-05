@@ -58,14 +58,14 @@ class ShoppingListRecipeApiTest extends TestCase
         $this->assertDatabaseHas('shopping_list_recipes', [
             'shopping_list_id' => $response->json('data.id'), 'recipe_id' => $recipe->id, 'added_by' => $this->user->id,
         ]);
-        $this->assertDatabaseHas('shopping_list_users', ['shopping_list_id' => $response->json('data.id'), 'user_id' => $this->user->id]);
+        $this->assertDatabaseMissing('shopping_list_users', ['shopping_list_id' => $response->json('data.id'), 'user_id' => $this->user->id]);
         $this->assertDatabaseCount('shopping_list_item_sources', 1);
     }
 
     public function test_existing_shared_open_list_is_used_and_closed_and_inaccessible_lists_are_ignored(): void
     {
         $owner = User::create(['username' => 'owner', 'pin' => '1234']);
-        $shared = ShoppingList::create(['created_by' => $owner->id, 'status' => 'open']);
+        $shared = ShoppingList::create(['created_by' => $owner->id, 'status' => 'open', 'visibility' => 'shared']);
         $shared->users()->attach($this->user->id);
         ShoppingList::create(['created_by' => $this->user->id, 'status' => 'closed']);
         ShoppingList::create(['created_by' => $owner->id, 'status' => 'open']);
