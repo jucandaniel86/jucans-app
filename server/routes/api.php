@@ -1,22 +1,24 @@
 <?php
 
-use App\Http\Controllers\Api\Admin\AdminIngredientController;
-use App\Http\Controllers\Api\Admin\RecipeIngredientReviewController;
-use App\Http\Controllers\Api\Admin\ShoppingCategoryController;
-use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\FoodConfigController;
-use App\Http\Controllers\Api\FoodTagController;
-use App\Http\Controllers\Api\IngredientAliasController;
-use App\Http\Controllers\Api\IngredientController;
-use App\Http\Controllers\Api\IngredientResolverController;
-use App\Http\Controllers\Api\RecipeController;
-use App\Http\Controllers\Api\ShoppingListController;
-use App\Http\Controllers\Api\ShoppingListSharingController;
-use Illuminate\Support\Facades\Route;
+  use App\Http\Controllers\Api\Admin\AdminIngredientController;
+  use App\Http\Controllers\Api\Admin\RecipeIngredientReviewController;
+  use App\Http\Controllers\Api\Admin\ShoppingCategoryController;
+  use App\Http\Controllers\Api\{AuthController,
+    DietController,
+    FoodConfigController,
+    FoodTagController,
+    IngredientAliasController,
+    IngredientController,
+    IngredientResolverController,
+    RecipeController,
+    ShoppingListController,
+    ShoppingListSharingController
+  };
+  use Illuminate\Support\Facades\Route;
 
-Route::post('/auth/login', [AuthController::class, 'login']);
+  Route::post('/auth/login', [AuthController::class, 'login']);
 
-Route::middleware('auth:sanctum')->group(function () {
+  Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::patch('/auth/avatar', [AuthController::class, 'updateAvatar']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -51,12 +53,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/shopping-lists/{shoppingList}/users', [ShoppingListSharingController::class, 'store']);
     Route::delete('/shopping-lists/{shoppingList}/users/{user}', [ShoppingListSharingController::class, 'destroy']);
 
-    Route::prefix('admin')->middleware('admin')->group(function () {
-        Route::get('/ingredients', [AdminIngredientController::class, 'index']);
-        Route::patch('/ingredients/{ingredient}', [AdminIngredientController::class, 'update']);
-        Route::post('/ingredients/{source}/merge-preview', [AdminIngredientController::class, 'mergePreview']);
-        Route::post('/ingredients/{source}/merge', [AdminIngredientController::class, 'merge']);
-        Route::get('/recipe-ingredient-reviews', [RecipeIngredientReviewController::class, 'index']);
-        Route::get('/shopping-categories', [ShoppingCategoryController::class, 'index']);
+    Route::prefix('diets')->group(function () {
+      Route::post('/', [DietController::class, 'store']);
+      Route::get('/daily-structures', [DietController::class, 'dailyStructures']);
+      Route::get('/{diet}', [DietController::class, 'show']);
     });
-});
+
+    Route::prefix('admin')->middleware('admin')->group(function () {
+      Route::get('/ingredients', [AdminIngredientController::class, 'index']);
+      Route::patch('/ingredients/{ingredient}', [AdminIngredientController::class, 'update']);
+      Route::post('/ingredients/{source}/merge-preview', [AdminIngredientController::class, 'mergePreview']);
+      Route::post('/ingredients/{source}/merge', [AdminIngredientController::class, 'merge']);
+      Route::get('/recipe-ingredient-reviews', [RecipeIngredientReviewController::class, 'index']);
+      Route::get('/shopping-categories', [ShoppingCategoryController::class, 'index']);
+    });
+  });
