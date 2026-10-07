@@ -3,7 +3,7 @@ import { useId } from 'vue'
 
 withDefaults(
   defineProps<{
-    modelValue: string
+    modelValue: string | null
     label: string
     hint?: string
     error?: string

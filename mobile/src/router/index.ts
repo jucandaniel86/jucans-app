@@ -12,6 +12,9 @@ import RandomRecipeView from '@/views/RandomRecipeView.vue'
 import RecipesView from '@/views/RecipesView.vue'
 import ShoppingListView from '@/views/ShoppingListView.vue'
 import ShoppingListsView from '@/views/ShoppingListsView.vue'
+//diets
+import DietsListsView from '@/views/diets/DietsListView.vue'
+import DietsEditView from '@/views/diets/DietsEditView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -28,6 +31,8 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: 'shopping-lists', name: 'shopping-lists', component: ShoppingListsView },
+        { path: 'diets-lists', name: 'diets-lists', component: DietsListsView },
+        { path: 'diets/:id', name: 'diet-edit', component: DietsEditView },
         {
           path: 'shopping-lists/:id',
           name: 'shopping-list-detail',

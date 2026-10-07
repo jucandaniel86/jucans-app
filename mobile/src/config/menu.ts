@@ -4,6 +4,7 @@ export type MenuRouteName =
   | 'recipe-create'
   | 'shopping-list'
   | 'shopping-lists'
+  | 'diets-lists'
   | 'admin-ingredients'
   | 'admin-recipe-reviews'
 
@@ -80,29 +81,23 @@ export const MENU_SECTIONS: MenuSection[] = [
       },
     ],
   },
+
   {
-    id: 'planning',
+    id: 'diets',
     label: null,
-    dividerBefore: true,
+    dividerBefore: false,
     items: [
       {
-        id: 'schedule',
-        label: 'Program',
-        routeName: null,
-        markerClass: 'drawer-link__mark--yellow',
+        id: 'diets-list',
+        label: 'Diete',
+        routeName: 'diets-lists',
+        markerClass: 'drawer-link__mark--turquoise',
         restricted: false,
-        soon: true,
-      },
-      {
-        id: 'tasks',
-        label: 'Taskuri',
-        routeName: null,
-        markerClass: 'drawer-link__mark--pink',
-        restricted: false,
-        soon: true,
+        soon: false,
       },
     ],
   },
+
   {
     id: 'administration',
     label: 'Administration',

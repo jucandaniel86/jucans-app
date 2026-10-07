@@ -1,0 +1,45 @@
+.diets-page {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.diets-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.diets-page__header p,
+.diets-page__header h1 {
+  margin: 0;
+}
+
+.diets-page__header p {
+  margin-bottom: var(--space-1);
+  color: var(--color-primary-strong);
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.diets-page__header h1 {
+  font-size: 1.75rem;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.diets-page__add {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 1.8rem;
+  line-height: 1;
+  text-decoration: none;
+  background: var(--color-pink);
+  box-shadow: var(--shadow-sm);
+}

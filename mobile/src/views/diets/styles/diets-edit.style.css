@@ -1,0 +1,112 @@
+.diet-form-state {
+  display: grid;
+  min-height: 360px;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.diet-form-state p {
+  margin: 0;
+}
+
+.add-diet {
+  display: grid;
+  gap: var(--space-8);
+  padding-bottom: var(--space-4);
+}
+
+.add-diet__intro {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.add-diet__icon {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--radius-md);
+  font-size: 1.7rem;
+  background: var(--color-yellow-soft);
+  box-shadow: var(--shadow-sm);
+}
+
+.add-diet__intro p,
+.add-diet__intro h1 {
+  margin: 0;
+}
+
+.add-diet__intro p {
+  margin-bottom: var(--space-1);
+  color: var(--color-primary-strong);
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.add-diet__intro h1 {
+  font-size: 2rem;
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.form-section {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.form-section__header {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.form-section__header > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--color-primary-strong);
+  font-size: 0.86rem;
+  font-weight: 850;
+  background: var(--color-primary-soft);
+}
+
+.form-section:nth-of-type(2) .form-section__header > span {
+  color: #a53468;
+  background: var(--color-pink-soft);
+}
+
+.form-section:nth-of-type(3) .form-section__header > span {
+  color: #825d00;
+  background: var(--color-yellow-soft);
+}
+
+.form-section__header h2,
+.form-section__header p {
+  margin: 0;
+}
+
+.form-section__header h2 {
+  font-size: 1.2rem;
+  letter-spacing: 0;
+}
+
+.form-section__header p {
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: 0.87rem;
+  line-height: 1.45;
+}
+
+.form-section__body {
+  display: grid;
+  gap: var(--space-4);
+}
