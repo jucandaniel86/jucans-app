@@ -3,16 +3,18 @@ import { computed, nextTick, ref, useId, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
 import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
+import { useNotificationStore } from '@/stores/notifications'
+import { actionErrorMessage } from '@/utils/actionError'
 import type { ActiveShoppingList, ShoppingListRecipe } from '@/types/shopping'
 
 const props = defineProps<{ list: ActiveShoppingList; readonly?: boolean }>()
 const emit = defineEmits<{ 'open-recipe': [] }>()
 const shopping = useActiveShoppingListStore()
+const notifications = useNotificationStore()
 const titleId = useId()
 const selected = ref<ShoppingListRecipe | null>(null)
 const dialog = ref<HTMLDialogElement | null>(null)
 const container = ref<HTMLElement | null>(null)
-const error = ref('')
 const busy = computed(() => shopping.removingRecipeId !== null)
 const canRemove = computed(
   () => !props.readonly && props.list.status !== 'closed' && props.list.id === shopping.list?.id,
@@ -21,7 +23,6 @@ const recipesUnavailable = computed(() => !props.list.recipes && props.list.reci
 
 async function confirm(recipe: ShoppingListRecipe): Promise<void> {
   if (!canRemove.value || busy.value || shopping.removalBlocked) return
-  error.value = ''
   selected.value = recipe
   await nextTick()
   dialog.value?.showModal()
@@ -30,19 +31,20 @@ function cancel(): void {
   if (busy.value) return
   dialog.value?.close()
   selected.value = null
-  error.value = ''
 }
 async function remove(): Promise<void> {
   if (!selected.value || !canRemove.value || busy.value || shopping.removalBlocked) return
-  error.value = ''
   try {
     await shopping.removeRecipe(selected.value.id)
     dialog.value?.close()
     selected.value = null
+    notifications.success('Rețeta a fost eliminată din listă.')
     await nextTick()
     container.value?.focus({ preventScroll: true })
-  } catch {
-    error.value = 'Nu am putut elimina rețeta. Încearcă din nou.'
+  } catch (failure) {
+    notifications.error(
+      actionErrorMessage(failure, 'Nu am putut elimina rețeta. Încearcă din nou.'),
+    )
   }
 }
 watch(
@@ -50,7 +52,6 @@ watch(
   () => {
     dialog.value?.close()
     selected.value = null
-    error.value = ''
   },
 )
 </script>
@@ -112,7 +113,6 @@ watch(
             Ingredientele adăugate doar de această rețetă vor fi eliminate din lista de cumpărături.
             Ingredientele folosite și de alte rețete vor fi recalculate.
           </p>
-          <p v-if="error" class="shopping-recipes__error" role="alert">{{ error }}</p>
           <div class="shopping-recipes__confirmation">
             <AppButton variant="secondary" :disabled="busy" @click="cancel">Anulează</AppButton>
             <AppButton
@@ -235,8 +235,5 @@ watch(
 .shopping-recipes__destructive {
   background: var(--color-error);
   box-shadow: none;
-}
-.shopping-recipes__error {
-  color: var(--color-error);
 }
 </style>

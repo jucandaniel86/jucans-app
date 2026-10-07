@@ -7,14 +7,24 @@ import ShoppingItemGroups from '@/components/shopping/ShoppingItemGroups.vue'
 import ShoppingListQuickAdd from '@/components/shopping/ShoppingListQuickAdd.vue'
 import ShoppingListTabs from '@/components/shopping/ShoppingListTabs.vue'
 import ShoppingListRecipes from '@/components/shopping/ShoppingListRecipes.vue'
+import ShoppingListSharing from '@/components/shopping/ShoppingListSharing.vue'
+import ShoppingListVisibilityBadge from '@/components/shopping/ShoppingListVisibilityBadge.vue'
 import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
 import { shoppingApi } from '@/services/shoppingApi'
 import { foodApi } from '@/services/foodApi'
-import type { ActiveShoppingList, ShoppingListTab } from '@/types/shopping'
+import { exportShoppingListText } from '@/utils/shoppingExport'
+import { useNotificationStore } from '@/stores/notifications'
+import { actionErrorMessage } from '@/utils/actionError'
+import type { ActiveShoppingList, ShoppingListSummary, ShoppingListTab } from '@/types/shopping'
 import type { FoodUnit } from '@/types/food'
-import { shoppingListName, shoppingListSummary } from '@/utils/shoppingPresentation'
+import {
+  shoppingListCreatorLabel,
+  shoppingListName,
+  shoppingListSummary,
+} from '@/utils/shoppingPresentation'
 
 const shopping = useActiveShoppingListStore()
+const notifications = useNotificationStore()
 const tab = ref<ShoppingListTab>('shopping')
 const panelId = useId()
 const content = ref<HTMLElement | null>(null)
@@ -24,30 +34,36 @@ const detail = ref<ActiveShoppingList | null>(null)
 const detailUnits = ref<Record<string, FoodUnit>>({})
 const detailLoading = ref(false)
 const detailError = ref('')
-const closeError = ref('')
+const exporting = ref(false)
+const sharingBusy = ref(false)
 const confirmDialog = ref<HTMLDialogElement | null>(null)
 let request = 0
 const list = computed(() =>
-  route.params.id && (detail.value?.status === 'closed' || detail.value?.id !== shopping.list?.id)
+  route.params.id &&
+  (shopping.error || detail.value?.status === 'closed' || detail.value?.id !== shopping.list?.id)
     ? detail.value
     : shopping.list,
 )
 const readonly = computed(
   () =>
     list.value?.status === 'closed' ||
-    Boolean(route.params.id && list.value?.id !== shopping.list?.id),
+    Boolean(route.params.id && (shopping.error || list.value?.id !== shopping.list?.id)),
 )
 const units = computed(() => (readonly.value ? detailUnits.value : shopping.units))
 const loading = computed(() => detailLoading.value || (!route.params.id && shopping.loading))
-const error = computed(() => detailError.value || (!readonly.value ? shopping.error : ''))
+const error = computed(() => (route.params.id ? detailError.value : shopping.error))
 const summary = computed(() => (list.value ? shoppingListSummary(list.value) : ''))
-const canClose = computed(() => list.value && !readonly.value && !loading.value && !error.value)
+const creatorLabel = computed(() => (list.value ? shoppingListCreatorLabel(list.value) : ''))
+const canEdit = computed(() => list.value && !readonly.value && !loading.value && !error.value)
+const canClose = computed(() => canEdit.value && list.value?.is_creator)
 const checking = computed(() => Object.keys(shopping.pendingChecks).length > 0)
 
 async function loadList(): Promise<void> {
   const sequence = ++request
   detailError.value = ''
   detail.value = null
+  detailUnits.value = {}
+  sharingBusy.value = false
   tab.value = 'shopping'
   confirmDialog.value?.close()
   if (!route.params.id) {
@@ -64,10 +80,16 @@ async function loadList(): Promise<void> {
     const response = await shoppingApi.getList(id)
     if (sequence !== request) return
     detail.value = response.data
-    if (response.data.status === 'open') await shopping.load(true)
-    else if (response.data.items.length) {
-      const config = await foodApi.getConfig()
-      if (sequence === request) detailUnits.value = config.units
+    if (response.data.status === 'open' && shopping.list?.id === id) {
+      shopping.updateSummary(response.data)
+      shopping.list = response.data
+    }
+    if (response.data.items.length) {
+      if (Object.keys(shopping.units).length) detailUnits.value = shopping.units
+      else {
+        const config = await foodApi.getConfig()
+        if (sequence === request) detailUnits.value = config.units
+      }
     }
   } catch {
     if (sequence === request)
@@ -77,19 +99,50 @@ async function loadList(): Promise<void> {
   }
 }
 
-async function closeList(): Promise<void> {
-  if (shopping.removalBlocked || shopping.removingRecipeId !== null) return
-  closeError.value = ''
+function updateSharing(summary: ShoppingListSummary): void {
+  if (detail.value?.id === summary.id) detail.value = { ...detail.value, ...summary }
+  shopping.updateSummary(summary)
+}
+async function exportList(): Promise<void> {
+  if (!list.value || exporting.value) return
+  exporting.value = true
   try {
-    await shopping.closeActive()
+    const result = await exportShoppingListText(list.value.id)
+    if (result === 'empty') notifications.info('Nu mai sunt produse de cumpărat.')
+  } catch (failure) {
+    notifications.error(actionErrorMessage(failure, 'Nu am putut exporta lista. Încearcă din nou.'))
+  } finally {
+    exporting.value = false
+  }
+}
+async function useList(): Promise<void> {
+  if (!detail.value || detail.value.status !== 'open') return
+  detailError.value = ''
+  try {
+    await shopping.selectList(detail.value.id)
+  } catch (failure) {
+    notifications.error(actionErrorMessage(failure, 'Nu am putut selecta lista. Încearcă din nou.'))
+  }
+}
+
+async function closeList(): Promise<void> {
+  if (
+    !canClose.value ||
+    sharingBusy.value ||
+    shopping.removalBlocked ||
+    shopping.removingRecipeId !== null
+  )
+    return
+  try {
+    await shopping.closeCurrent()
+    notifications.success('Lista a fost închisă.')
     confirmDialog.value?.close()
     await router.push({ name: 'shopping-lists' })
-  } catch {
-    closeError.value = 'Nu am putut închide lista. Încearcă din nou.'
+  } catch (failure) {
+    notifications.error(actionErrorMessage(failure, 'Nu am putut închide lista. Încearcă din nou.'))
   }
 }
 function openCloseDialog(): void {
-  closeError.value = ''
   confirmDialog.value?.showModal()
 }
 watch(() => route.params.id, loadList, { immediate: true })
@@ -101,12 +154,54 @@ watch(tab, () => {
 <template>
   <section class="shopping-list" :aria-busy="loading">
     <header class="shopping-list__header">
-      <RouterLink class="shopping-list__back" :to="{ name: 'shopping-lists' }"
-        >‹ Liste de cumpărături</RouterLink
+      <div class="shopping-list__title-row">
+        <h1>{{ list ? shoppingListName(list) : 'Lista de cumpărături' }}</h1>
+        <ShoppingListSharing
+          v-if="!loading && !error && list?.is_creator"
+          :key="list.id"
+          :list="list"
+          compact
+          :disabled="shopping.removalBlocked || shopping.removingRecipeId !== null"
+          @updated="updateSharing"
+          @busy="sharingBusy = $event"
+        />
+        <RouterLink
+          class="shopping-list__dismiss"
+          :to="{ name: 'shopping-lists' }"
+          aria-label="Înapoi la liste"
+          title="Înapoi la liste"
+        >
+          <span aria-hidden="true">×</span>
+        </RouterLink>
+      </div>
+      <p v-if="!loading && !error && list" class="shopping-list__summary">
+        {{ summary }} · {{ creatorLabel }}
+      </p>
+      <div v-if="!loading && !error && list" class="shopping-list__meta">
+        <ShoppingListVisibilityBadge :list="list" />
+        <span v-if="list.status === 'closed'" class="shopping-list__closed">Închisă</span>
+        <span v-else-if="!readonly">✓ Lista curentă</span>
+        <button
+          class="shopping-list__export"
+          type="button"
+          :disabled="exporting"
+          @click="exportList"
+        >
+          Export
+        </button>
+      </div>
+      <p
+        v-if="list?.status === 'open' && readonly && !loading"
+        class="shopping-list__use"
+        role="status"
       >
-      <h1>{{ list ? shoppingListName(list) : 'Lista de cumpărături' }}</h1>
-      <span v-if="list?.status === 'closed'" class="shopping-list__closed">Închisă</span>
-      <p v-if="!loading && !error && list">{{ summary }}</p>
+        <AppButton
+          variant="secondary"
+          :disabled="shopping.busy || shopping.loading"
+          @click="useList"
+          >Folosește lista</AppButton
+        >
+      </p>
     </header>
 
     <ShoppingListTabs
@@ -139,18 +234,28 @@ watch(tab, () => {
       />
       <div v-else-if="!list || !list.items.length" class="shopping-list__state">
         <span class="shopping-list__empty-icon" aria-hidden="true">🛒</span>
-        <h2>Lista de cumpărături este goală.</h2>
+        <h2>
+          {{
+            shopping.selectionRequired && !list
+              ? 'Alege lista curentă.'
+              : 'Lista de cumpărături este goală.'
+          }}
+        </h2>
+        <RouterLink v-if="!list && shopping.selectionRequired" :to="{ name: 'shopping-lists' }"
+          >Liste de cumpărături</RouterLink
+        >
         <p>Adaugă rețete în listă din pagina unei rețete.</p>
         <RouterLink :to="{ name: 'recipes' }">Vezi rețetele</RouterLink>
       </div>
       <ShoppingItemGroups v-else :items="list.items" :units="units" :readonly="readonly" />
     </div>
-    <footer v-if="canClose" class="shopping-list__actions">
+    <footer v-if="canEdit" class="shopping-list__actions">
       <ShoppingListQuickAdd v-if="tab === 'shopping'" />
       <AppButton
+        v-if="canClose"
         class="shopping-list__close"
         variant="secondary"
-        :disabled="shopping.removalBlocked || shopping.removingRecipeId !== null"
+        :disabled="sharingBusy || shopping.removalBlocked || shopping.removingRecipeId !== null"
         @click="openCloseDialog"
         >Închide lista</AppButton
       >
@@ -164,7 +269,6 @@ watch(tab, () => {
       <form @submit.prevent="closeList">
         <h2 id="close-list-title">Închide lista?</h2>
         <p>Lista va fi mutată în istoric și nu va mai putea fi modificată.</p>
-        <p v-if="closeError" role="alert">{{ closeError }}</p>
         <div>
           <AppButton
             variant="secondary"
@@ -189,20 +293,66 @@ watch(tab, () => {
 </template>
 
 <style scoped>
-.shopping-list__back {
+.shopping-list__dismiss {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
-  margin-bottom: var(--space-2);
-  color: var(--color-primary-strong);
-  font-size: 0.86rem;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border: 1px solid color-mix(in srgb, var(--color-error) 30%, var(--color-border));
+  border-radius: 8px;
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 8%, var(--color-surface));
+  font-size: 1.5rem;
+  line-height: 1;
   text-decoration: none;
 }
-.shopping-list__closed {
-  display: inline-block;
+.shopping-list__dismiss:hover {
+  background: color-mix(in srgb, var(--color-error) 14%, var(--color-surface));
+}
+.shopping-list__dismiss:focus-visible {
+  outline: 2px solid var(--color-error);
+  outline-offset: 2px;
+}
+.shopping-list__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.shopping-list__title-row h1 {
+  flex: 1;
+  min-width: 0;
+}
+.shopping-list__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
   margin-top: var(--space-2);
+  color: var(--color-primary-strong);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+.shopping-list__closed {
   font-size: 0.8rem;
   color: var(--color-text-muted);
+}
+.shopping-list__export {
+  min-height: 32px;
+  margin-left: auto;
+  border: 0;
+  padding: 0 var(--space-1);
+  color: var(--color-primary-strong);
+  background: transparent;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.shopping-list__export:disabled {
+  opacity: 0.55;
+  cursor: wait;
 }
 .shopping-list__close {
   flex-shrink: 0;
@@ -239,7 +389,7 @@ watch(tab, () => {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  gap: var(--space-4);
+  gap: var(--space-2);
 }
 .shopping-list__header {
   flex-shrink: 0;
@@ -263,14 +413,23 @@ watch(tab, () => {
 }
 .shopping-list__header h1 {
   margin: 0;
-  font-size: 1.65rem;
+  font-size: 1.35rem;
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
-.shopping-list__header p {
-  margin: var(--space-2) 0 0;
+.shopping-list__summary {
+  margin: var(--space-1) 0 0;
   color: var(--color-text-muted);
-  font-size: 0.86rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+.shopping-list__use {
+  margin: var(--space-2) 0 0;
+}
+.shopping-list__use :deep(.app-button) {
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border-radius: 8px;
 }
 .shopping-list__state {
   display: grid;
@@ -315,21 +474,12 @@ watch(tab, () => {
   .shopping-list {
     gap: var(--space-1);
   }
-  .shopping-list__back {
-    margin-bottom: 0;
-  }
-  .shopping-list__header {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    column-gap: var(--space-2);
-  }
   .shopping-list__header h1 {
     font-size: 1rem;
   }
   .shopping-list__closed,
-  .shopping-list__header p {
-    grid-column: 1 / -1;
+  .shopping-list__meta,
+  .shopping-list__summary {
     margin-top: var(--space-1);
   }
 }

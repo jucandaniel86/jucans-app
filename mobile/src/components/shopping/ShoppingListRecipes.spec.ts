@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ActiveShoppingList } from '@/types/shopping'
 
 const mocks = vi.hoisted(() => ({
-  getActive: vi.fn(),
+  getOpen: vi.fn(),
   getList: vi.fn(),
   removeRecipe: vi.fn(),
   getConfig: vi.fn(),
@@ -23,12 +23,16 @@ import FloatingShoppingList from '@/components/shopping/FloatingShoppingList.vue
 import ShoppingListRecipes from '@/components/shopping/ShoppingListRecipes.vue'
 import ShoppingListTabs from '@/components/shopping/ShoppingListTabs.vue'
 import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
+import { useNotificationStore } from '@/stores/notifications'
 
 const initial: ActiveShoppingList = {
   id: 1,
   name: null,
   visibility: 'private',
   created_by: 1,
+  creator: { id: 1, name: 'daniel', username: 'daniel', avatar: null },
+  is_creator: true,
+  is_shared_with_me: false,
   created_at: null,
   closed_at: null,
   status: 'open',
@@ -81,10 +85,8 @@ describe('shopping recipes tabs and shared removal', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     mocks.route.params = {}
-    mocks.getActive.mockReset().mockResolvedValue({ data: structuredClone(initial) })
-    mocks.getList
-      .mockReset()
-      .mockResolvedValue({ data: { ...structuredClone(initial), id: 9, status: 'closed' } })
+    mocks.getOpen.mockReset().mockResolvedValue({ data: [structuredClone(initial)] })
+    mocks.getList.mockReset().mockResolvedValue({ data: structuredClone(initial) })
     mocks.getConfig.mockReset().mockResolvedValue({ units: { liter: { label: 'l' } } })
     mocks.removeRecipe.mockReset().mockResolvedValue({ data: structuredClone(updated) })
     HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
@@ -120,7 +122,7 @@ describe('shopping recipes tabs and shared removal', () => {
       await source.get('.shopping-recipes__dialog form').trigger('submit')
       await flushPromises()
       expect(mocks.removeRecipe).toHaveBeenCalledExactlyOnceWith(1, 12)
-      expect(mocks.getActive).toHaveBeenCalledTimes(1)
+      expect(mocks.getOpen).toHaveBeenCalledTimes(1)
       for (const view of [full, floating]) {
         expect(view.findAll('.shopping-recipes__row')).toHaveLength(1)
         expect(view.findAll('[role="tab"]')[1]!.text()).toContain('(1)')
@@ -157,7 +159,7 @@ describe('shopping recipes tabs and shared removal', () => {
     expect(view.get('.shopping-recipes__destructive').attributes('disabled')).toBeDefined()
     reject(new Error('offline'))
     await flushPromises()
-    expect(view.get('[role="alert"]').text()).toContain('Nu am putut elimina rețeta')
+    expect(useNotificationStore().notifications.at(-1)?.message).toContain('Nu am putut elimina rețeta')
     expect(store.list).toEqual(initial)
     await view.get('form').trigger('submit')
     await flushPromises()
@@ -192,6 +194,7 @@ describe('shopping recipes tabs and shared removal', () => {
   })
 
   it('shows closed history recipes read-only without replacing active state', async () => {
+    mocks.getList.mockResolvedValue({ data: { ...structuredClone(initial), id: 9, status: 'closed' } })
     mocks.route.params = { id: '9' }
     const store = useActiveShoppingListStore()
     store.list = structuredClone(initial)
@@ -202,7 +205,7 @@ describe('shopping recipes tabs and shared removal', () => {
     expect(view.find('[aria-label^="Elimină:"]').exists()).toBe(false)
     expect(view.find('.shopping-list__actions').exists()).toBe(false)
     expect(store.list).toEqual(initial)
-    expect(mocks.getActive).not.toHaveBeenCalled()
+    expect(mocks.getOpen).not.toHaveBeenCalled()
     view.unmount()
   })
 

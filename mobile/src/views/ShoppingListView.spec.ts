@@ -5,8 +5,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ShoppingItem } from '@/types/shopping'
 
-const mocks = vi.hoisted(() => ({ getActive: vi.fn(), getConfig: vi.fn() }))
-vi.mock('@/services/shoppingApi', () => ({ shoppingApi: { getActive: mocks.getActive } }))
+const mocks = vi.hoisted(() => ({ getOpen: vi.fn(), getList: vi.fn(), getConfig: vi.fn() }))
+vi.mock('@/services/shoppingApi', () => ({ shoppingApi: mocks }))
 vi.mock('@/services/foodApi', () => ({ foodApi: { getConfig: mocks.getConfig } }))
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: {} }),
@@ -49,7 +49,10 @@ describe('ShoppingListView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
-    mocks.getActive.mockResolvedValue({ data: null })
+    mocks.getOpen.mockResolvedValue({ data: [] })
+    mocks.getList.mockResolvedValue({
+      data: { id: 1, status: 'open', is_creator: true, items, items_count: 5, recipes_count: 3 },
+    })
     mocks.getConfig.mockResolvedValue({
       units: {
         gram: { label: 'g' },
@@ -66,12 +69,12 @@ describe('ShoppingListView', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Lista de cumpărături este goală.')
     expect(wrapper.text()).toContain('Adaugă rețete în listă din pagina unei rețete.')
-    expect(mocks.getActive).toHaveBeenCalledTimes(1)
+    expect(mocks.getOpen).toHaveBeenCalledTimes(1)
     expect(mocks.getConfig).not.toHaveBeenCalled()
   })
 
   it('renders category order, Romanian alphabetical item order and localized user quantities', async () => {
-    mocks.getActive.mockResolvedValue({ data: { items, items_count: 5, recipes_count: 3 } })
+    mocks.getOpen.mockResolvedValue({ data: [{ id: 1, status: 'open', is_creator: true }] })
     const wrapper = mount(ShoppingListView)
     await flushPromises()
     expect(wrapper.text()).toContain('5 produse · 3 rețete')
@@ -101,7 +104,17 @@ describe('ShoppingListView', () => {
   })
 
   it('handles an existing list with no items', async () => {
-    mocks.getActive.mockResolvedValue({ data: { items: [], items_count: 0, recipes_count: 1 } })
+    mocks.getOpen.mockResolvedValue({ data: [{ id: 1, status: 'open', is_creator: true }] })
+    mocks.getList.mockResolvedValue({
+      data: {
+        id: 1,
+        status: 'open',
+        is_creator: true,
+        items: [],
+        items_count: 0,
+        recipes_count: 1,
+      },
+    })
     const wrapper = mount(ShoppingListView)
     await flushPromises()
     expect(wrapper.text()).toContain('0 produse · 1 rețetă')
@@ -109,24 +122,27 @@ describe('ShoppingListView', () => {
   })
 
   it('shows load errors with a working retry', async () => {
-    mocks.getActive.mockRejectedValueOnce(new Error('offline'))
+    mocks.getOpen.mockRejectedValueOnce(new Error('offline'))
     const wrapper = mount(ShoppingListView)
     await flushPromises()
     expect(wrapper.find('[role="alert"]').text()).toContain('Nu am putut încărca lista')
     await wrapper.find('button').trigger('click')
     await flushPromises()
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
-    expect(mocks.getActive).toHaveBeenCalledTimes(2)
+    expect(mocks.getOpen).toHaveBeenCalledTimes(2)
   })
 
   it('reads fresh data when reopened after a recipe addition', async () => {
     const first = mount(ShoppingListView)
     await flushPromises()
     first.unmount()
-    mocks.getActive.mockResolvedValue({ data: { items, items_count: 5, recipes_count: 1 } })
+    mocks.getOpen.mockResolvedValue({ data: [{ id: 1, status: 'open', is_creator: true }] })
+    mocks.getList.mockResolvedValue({
+      data: { id: 1, status: 'open', is_creator: true, items, items_count: 5, recipes_count: 1 },
+    })
     const next = mount(ShoppingListView)
     await flushPromises()
-    expect(mocks.getActive).toHaveBeenCalledTimes(2)
+    expect(mocks.getOpen).toHaveBeenCalledTimes(2)
     expect(next.text()).toContain('Roșii')
   })
 })

@@ -15,7 +15,7 @@ const shoppingExpanded = ref(false)
 const shoppingHeight = ref(120)
 const showShopping = computed(
   () =>
-    (shopping.hasItems || (shoppingExpanded.value && shopping.list !== null)) &&
+    shopping.list !== null &&
     !drawerOpen.value &&
     route.name !== 'shopping-list' &&
     !route.meta.shoppingDetail &&

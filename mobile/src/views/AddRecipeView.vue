@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useNotificationStore } from '@/stores/notifications'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -104,6 +105,7 @@ async function saveRecipe(): Promise<void> {
   }
 
   if (saved && isEdit.value && recipeId.value) {
+    useNotificationStore().success('Rețeta a fost salvată.')
     if (route.query.returnTo === 'admin-recipe-reviews') {
       await router.replace({
         name: 'admin-recipe-reviews',

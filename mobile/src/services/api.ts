@@ -89,6 +89,41 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return payload
 }
 
+async function requestText(path: string): Promise<{ text: string; status: number }> {
+  if (!apiBaseUrl) {
+    throw new ApiError('Adresa API nu este configurată.', 0)
+  }
+
+  const headers = new Headers()
+  headers.set('Accept', 'text/plain')
+  if (accessToken) {
+    headers.set('Authorization', `Bearer ${accessToken}`)
+  }
+
+  let response: Response
+
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, { headers })
+  } catch {
+    throw new ApiError('Nu ne-am putut conecta la server. Încearcă din nou.', 0)
+  }
+
+  if (response.status === 401) {
+    await unauthorizedHandler?.()
+  }
+
+  if (response.status === 204) {
+    return { text: '', status: 204 }
+  }
+
+  const text = await response.text()
+  if (!response.ok) {
+    throw new ApiError(text || 'A apărut o problemă. Încearcă din nou.', response.status)
+  }
+
+  return { text, status: response.status }
+}
+
 export const api = {
   get<T>(path: string): Promise<T> {
     return request<T>(path)
@@ -104,5 +139,9 @@ export const api = {
 
   delete<T>(path: string): Promise<T> {
     return request<T>(path, { method: 'DELETE' })
+  },
+
+  getText(path: string): Promise<{ text: string; status: number }> {
+    return requestText(path)
   },
 }

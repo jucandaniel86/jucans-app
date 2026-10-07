@@ -4,7 +4,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  getActive: vi.fn(),
+  getOpen: vi.fn(),
+  getList: vi.fn(),
   setItemChecked: vi.fn(),
   getConfig: vi.fn(),
 }))
@@ -18,9 +19,12 @@ vi.mock('vue-router', () => ({
 import FloatingShoppingList from '@/components/shopping/FloatingShoppingList.vue'
 import ShoppingListView from '@/views/ShoppingListView.vue'
 import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
+import { useNotificationStore } from '@/stores/notifications'
 
 const initial = {
   id: 1,
+  status: 'open',
+  is_creator: true,
   items_count: 2,
   recipes_count: 1,
   unchecked_items_count: 2,
@@ -48,16 +52,19 @@ describe('shared shopping checkbox interaction', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     const server = structuredClone(initial)
-    mocks.getActive.mockReset().mockImplementation(async () => ({ data: structuredClone(server) }))
+    mocks.getOpen.mockReset().mockImplementation(async () => ({ data: [structuredClone(server)] }))
+    mocks.getList.mockReset().mockImplementation(async () => ({ data: structuredClone(server) }))
     mocks.getConfig
       .mockReset()
       .mockResolvedValue({ units: { kilogram: { label: 'kg' }, piece: { label: 'buc' } } })
-    mocks.setItemChecked.mockReset().mockImplementation(async (id: number, checked: boolean) => {
-      const item = server.items.find((item) => item.id === id)!
-      item.is_checked = checked
-      server.unchecked_items_count = server.items.filter((item) => !item.is_checked).length
-      return { data: structuredClone(item) }
-    })
+    mocks.setItemChecked
+      .mockReset()
+      .mockImplementation(async (_listId: number, id: number, checked: boolean) => {
+        const item = server.items.find((item) => item.id === id)!
+        item.is_checked = checked
+        server.unchecked_items_count = server.items.filter((item) => !item.is_checked).length
+        return { data: structuredClone(item) }
+      })
   })
 
   it('checks in the preview, shows purchased items in the full screen, and unchecks in both', async () => {
@@ -97,7 +104,7 @@ describe('shared shopping checkbox interaction', () => {
     reject(new Error('offline'))
     await flushPromises()
     expect(full.find('.shopping-list__purchased').exists()).toBe(false)
-    expect(full.find('[role="alert"]').text()).toContain('Nu am putut salva modificarea')
+    expect(useNotificationStore().notifications.at(-1)?.message).toContain('Nu am putut salva modificarea')
     expect(full.find('input[aria-label="Marchează ca cumpărat: Roșii"]').element).toHaveProperty(
       'checked',
       false,

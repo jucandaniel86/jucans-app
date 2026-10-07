@@ -4,6 +4,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/services/api'
 import { createPinia, setActivePinia } from 'pinia'
+import { useNotificationStore } from '@/stores/notifications'
 
 const mocks = vi.hoisted(() => ({
   getRecipe: vi.fn(),
@@ -60,9 +61,10 @@ describe('RecipeDetail shopping action', () => {
     await button.trigger('click')
     await flushPromises()
     expect(mocks.addRecipe).toHaveBeenCalledWith(12)
-    expect(wrapper.find('[role="status"]').text()).toBe('Adăugat în lista de cumpărături')
+    expect(useNotificationStore().notifications.at(-1)?.message).toBe('Adăugat în lista de cumpărături')
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Carbonara')
-    expect(wrapper.text()).toContain('Deschide lista')
+    expect(wrapper.text()).toContain('Alege lista')
     expect(mocks.back).not.toHaveBeenCalled()
   })
 
@@ -89,7 +91,7 @@ describe('RecipeDetail shopping action', () => {
     const { wrapper, button } = await render()
     await button.trigger('click')
     await flushPromises()
-    expect(wrapper.find('[role="status"]').text()).toBe('Rețeta este deja în listă')
+    expect(useNotificationStore().notifications.at(-1)).toMatchObject({ type: 'info', message: 'Rețeta este deja în listă' })
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   })
 
@@ -103,14 +105,14 @@ describe('RecipeDetail shopping action', () => {
     const { wrapper, button } = await render()
     await button.trigger('click')
     await flushPromises()
-    expect(wrapper.find('[role="alert"]').text()).toContain(
+    expect(useNotificationStore().notifications.at(-1)?.message).toContain(
       'Unele ingrediente necesită verificare.',
     )
-    expect(wrapper.find('[role="alert"]').text()).toContain('Lapte · Parmezan')
+    expect(useNotificationStore().notifications.at(-1)?.message).toContain('Lapte · Parmezan')
     await button.trigger('click')
     await flushPromises()
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
-    expect(wrapper.find('[role="status"]').exists()).toBe(true)
+    expect(useNotificationStore().notifications.at(-1)?.type).toBe('success')
   })
 
   it('shows network errors and allows retry', async () => {
@@ -118,7 +120,32 @@ describe('RecipeDetail shopping action', () => {
     const { wrapper, button } = await render()
     await button.trigger('click')
     await flushPromises()
-    expect(wrapper.find('[role="alert"]').text()).toContain('Nu ne-am putut conecta la server.')
+    expect(useNotificationStore().notifications.at(-1)?.message).toContain('Nu ne-am putut conecta la server.')
     expect(button.attributes('disabled')).toBeUndefined()
+  })
+
+  it('places the actual YouTube source before Shopping List actions', async () => {
+    const data = (await mocks.getRecipe()).data
+    mocks.getRecipe.mockResolvedValue({ data: { ...data, url: 'https://youtu.be/recipe' } })
+    const { wrapper } = await render()
+    const source = wrapper.find('.recipe-detail__source')
+    expect(source.text()).toBe('▶ Vezi pe YouTube')
+    expect(source.attributes('href')).toBe('https://youtu.be/recipe')
+    expect(source.attributes('target')).toBe('_blank')
+    expect(source.attributes('rel')).toBe('noopener noreferrer')
+    expect(source.element.nextElementSibling?.className).toBe('recipe-detail__shopping')
+    wrapper.unmount()
+  })
+
+  it('omits missing or unsafe sources and labels other sources compactly', async () => {
+    const data = (await mocks.getRecipe()).data
+    for (const url of [null, 'javascript:alert(1)', 'https://example.com/recipe']) {
+      mocks.getRecipe.mockResolvedValue({ data: { ...data, url } })
+      const { wrapper } = await render()
+      const source = wrapper.find('.recipe-detail__source')
+      expect(source.exists()).toBe(url === 'https://example.com/recipe')
+      if (source.exists()) expect(source.text()).toBe('↗ Vezi sursa')
+      wrapper.unmount()
+    }
   })
 })

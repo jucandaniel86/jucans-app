@@ -4,7 +4,12 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ActiveShoppingList, ManualShoppingItemInput, ShoppingItem } from '@/types/shopping'
 
-const mocks = vi.hoisted(() => ({ getActive: vi.fn(), addManualItem: vi.fn(), getConfig: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  getOpen: vi.fn(),
+  getList: vi.fn(),
+  addManualItem: vi.fn(),
+  getConfig: vi.fn(),
+}))
 vi.mock('@/services/shoppingApi', () => ({ shoppingApi: mocks }))
 vi.mock('@/services/foodApi', () => ({ foodApi: { getConfig: mocks.getConfig } }))
 vi.mock('vue-router', () => ({
@@ -34,25 +39,29 @@ describe('shared manual shopping additions', () => {
           shopping_category: null,
         },
       ],
+      is_creator: true,
     } as ActiveShoppingList
-    mocks.getActive.mockReset().mockImplementation(async () => ({ data: structuredClone(server) }))
+    mocks.getOpen.mockReset().mockImplementation(async () => ({ data: [structuredClone(server)] }))
+    mocks.getList.mockReset().mockImplementation(async () => ({ data: structuredClone(server) }))
     mocks.getConfig.mockReset().mockResolvedValue({ units: { liter: { label: 'l' } } })
-    mocks.addManualItem.mockReset().mockImplementation(async (input: ManualShoppingItemInput) => {
-      const item: ShoppingItem = {
-        ...input,
-        id: server.items.length + 1,
-        ingredient_id: null,
-        calculated_quantity: null,
-        quantity: input.quantity === null ? null : input.quantity.toFixed(3),
-        shopping_category: null,
-        is_checked: false,
-        quantity_overridden: true,
-      }
-      server.items.push(item)
-      server.items_count++
-      server.unchecked_items_count++
-      return { data: item }
-    })
+    mocks.addManualItem
+      .mockReset()
+      .mockImplementation(async (_listId: number, input: ManualShoppingItemInput) => {
+        const item: ShoppingItem = {
+          ...input,
+          id: server.items.length + 1,
+          ingredient_id: null,
+          calculated_quantity: null,
+          quantity: input.quantity === null ? null : input.quantity.toFixed(3),
+          shopping_category: null,
+          is_checked: false,
+          quantity_overridden: true,
+        }
+        server.items.push(item)
+        server.items_count++
+        server.unchecked_items_count++
+        return { data: item }
+      })
   })
 
   it.each(['collapsed', 'expanded', 'full'] as const)(
@@ -74,7 +83,7 @@ describe('shared manual shopping additions', () => {
       await quick.get('form').trigger('submit')
       await flushPromises()
       expect(mocks.addManualItem).toHaveBeenCalledTimes(1)
-      expect(mocks.getActive).toHaveBeenCalledTimes(1)
+      expect(mocks.getOpen).toHaveBeenCalledTimes(1)
       expect(collapsed.get('.floating-shopping__heading').text()).toContain('2 de cumpărat')
       for (const view of [full, expanded]) {
         const row = view.findAll('li').find((row) => row.text().includes('Dero'))!

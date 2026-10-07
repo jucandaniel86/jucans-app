@@ -1,6 +1,14 @@
 import type { RecipeSummary, ShoppingCategory, PaginationMeta, FoodTag } from '@/types/food'
 
 export type ShoppingListTab = 'shopping' | 'recipes'
+export type ShoppingListVisibility = 'private' | 'shared' | 'public'
+
+export interface ShoppingListUser {
+  id: number
+  name: string
+  username: string
+  avatar: string | null
+}
 
 export interface ShoppingListRecipe {
   id: number
@@ -34,12 +42,23 @@ export interface ManualShoppingItemInput {
   unit: string | null
 }
 
+export interface ShoppingItemUpdateInput {
+  is_checked?: boolean
+  name?: string
+  quantity?: number | null
+  unit?: string | null
+  reset_quantity?: boolean
+}
+
 export interface ShoppingListSummary {
   id: number
   name: string | null
   status: string
-  visibility: string
+  visibility: ShoppingListVisibility
   created_by: number
+  creator: ShoppingListUser
+  is_creator: boolean
+  is_shared_with_me: boolean
   closed_at: string | null
   created_at: string | null
   recipes_count: number
@@ -57,6 +76,7 @@ export interface ShoppingListRemovalResult extends ActiveShoppingList {
 }
 
 export interface ShoppingRecipeResult extends ShoppingListSummary {
+  recipes: ShoppingListRecipe[]
   recipe: Omit<RecipeSummary, 'creator' | 'tags'>
   already_present: boolean
   items: ShoppingItem[]

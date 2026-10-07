@@ -39,7 +39,22 @@ class ShoppingListController extends Controller
     {
         $list = $this->lists->accessibleListQuery($request->user())->whereKey($shoppingList->id)->firstOrFail();
 
-        return new ShoppingListResource($this->lists->loadSummaryCounts($list, $request->user())->load(['items.shoppingCategory', 'items.sources']));
+        return new ShoppingListResource($this->lists->loadSummaryCounts($list, $request->user())->load([
+            'items.shoppingCategory',
+            'items.sources',
+            'recipes' => fn ($query) => $query->orderBy('recipes.id'),
+        ]));
+    }
+
+    public function open(Request $request): AnonymousResourceCollection
+    {
+        return ShoppingListResource::collection($this->lists->summaryQuery($request->user())
+            ->where('status', 'open')->orderBy('id')->get());
+    }
+
+    public function closeList(Request $request, ShoppingList $shoppingList): ShoppingListResource
+    {
+        return new ShoppingListResource($this->lists->closeList($request->user(), $shoppingList));
     }
 
     public function close(Request $request): ShoppingListResource|JsonResponse
@@ -59,13 +74,14 @@ class ShoppingListController extends Controller
 
         return new ShoppingListResource($this->lists->loadSummaryCounts($shoppingList, $request->user())->load([
             'items.shoppingCategory',
+            'items.sources',
             'recipes' => fn ($query) => $query->orderBy('recipes.id'),
         ]));
     }
 
     public function store(Request $request): JsonResponse
     {
-        [$shoppingList, $created] = $this->lists->getOrCreateActive($request->user());
+        [$shoppingList, $created] = $this->lists->getOrCreateOwnedOpen($request->user());
 
         return (new ShoppingListResource($this->lists->loadSummaryCounts($shoppingList, $request->user())))
             ->response()
@@ -78,6 +94,48 @@ class ShoppingListController extends Controller
 
         return (new ShoppingListRecipeResource($result))->response()
             ->setStatusCode($result['already_present'] ? 200 : 201);
+    }
+
+    public function addRecipeToList(Request $request, ShoppingList $shoppingList, Recipe $recipe, ShoppingListRecipeService $service): JsonResponse
+    {
+        $result = $service->add($request->user(), $recipe, $shoppingList);
+
+        return (new ShoppingListRecipeResource($result))->response()
+            ->setStatusCode($result['already_present'] ? 200 : 201);
+    }
+
+    public function storeListItem(StoreManualShoppingListItemRequest $request, ShoppingList $shoppingList): JsonResponse
+    {
+        return (new ShoppingListItemResource($this->lists->addManualItem(
+            $request->user(), $request->validated(), $shoppingList
+        )))->response()->setStatusCode(201);
+    }
+
+    public function updateListItem(UpdateShoppingListItemRequest $request, ShoppingList $shoppingList, ShoppingListItem $item): ShoppingListItemResource
+    {
+        return new ShoppingListItemResource($this->lists->updateItem(
+            $request->user(), $item, $request->validated(), $shoppingList
+        ));
+    }
+
+    public function destroyListItem(Request $request, ShoppingList $shoppingList, ShoppingListItem $item): JsonResponse
+    {
+        $this->lists->deleteManualItem($request->user(), $item, $shoppingList);
+
+        return response()->json(null, 204);
+    }
+
+    public function export(Request $request, ShoppingList $shoppingList): JsonResponse|\Symfony\Component\HttpFoundation\Response
+    {
+        $text = $this->lists->exportUnchecked($request->user(), $shoppingList);
+        if ($text === null) {
+            return response()->json(null, 204);
+        }
+
+        return response($text, 200, [
+            'Content-Type' => 'text/plain; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="lista-cumparaturi.txt"',
+        ]);
     }
 
     public function storeItem(StoreManualShoppingListItemRequest $request): JsonResponse
@@ -94,8 +152,8 @@ class ShoppingListController extends Controller
 
     public function updateItem(UpdateShoppingListItemRequest $request, ShoppingListItem $item): ShoppingListItemResource
     {
-        return new ShoppingListItemResource($this->lists->updateItemChecked(
-            $request->user(), $item, (bool) $request->validated('is_checked')
+        return new ShoppingListItemResource($this->lists->updateItem(
+            $request->user(), $item, $request->validated()
         ));
     }
 }

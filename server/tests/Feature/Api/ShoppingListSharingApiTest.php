@@ -198,7 +198,7 @@ class ShoppingListSharingApiTest extends TestCase
         }
         $recipe = $daniel->recipes()->create(['name' => 'Recipe']);
         $this->getJson('/api/shopping-lists/active')->assertConflict();
-        $this->postJson('/api/shopping-lists')->assertConflict();
+        $this->postJson('/api/shopping-lists')->assertOk()->assertJsonPath('data.id', $own->id);
         $this->postJson('/api/shopping-lists/active/items', ['name' => 'Must not add'])->assertConflict();
         $this->patchJson('/api/shopping-lists/active/items/'.$item->id, ['is_checked' => true])->assertConflict();
         $this->postJson('/api/shopping-lists/active/recipes/'.$recipe->id)->assertConflict();

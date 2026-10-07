@@ -84,6 +84,17 @@ class RecipeApiTest extends TestCase
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $bothTags->id);
 
+        $this->getJson("/api/recipes?search=cartofi&tags={$quick->id},{$oven->id}&per_page=5")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.id', $bothTags->id);
+
+        $this->getJson("/api/recipes?search=salată&tags={$quick->id},{$oven->id}")
+            ->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('meta.total', 0);
+
         $this->getJson('/api/recipes?sort=name')
             ->assertOk()
             ->assertJsonPath('data.0.id', $quickOnly->id)

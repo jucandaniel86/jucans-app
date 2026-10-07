@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import AppLoading from '@/components/app/AppLoading.vue'
+import AppNotifications from '@/components/app/AppNotifications.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const MINIMUM_LOADING_TIME = 750
@@ -47,4 +48,5 @@ watch(isAuthenticated, async () => {
       <component :is="Component" v-else key="application" />
     </Transition>
   </RouterView>
+  <AppNotifications />
 </template>

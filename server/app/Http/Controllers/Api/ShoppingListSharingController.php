@@ -19,6 +19,13 @@ class ShoppingListSharingController extends Controller
 {
     public function __construct(private readonly ShoppingListService $lists) {}
 
+    public function shareableUsers(Request $request): JsonResponse
+    {
+        return response()->json(['data' => User::query()->where('id', '!=', $request->user()->id)
+            ->orderBy('username')->get(['id', 'username'])
+            ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->username])]);
+    }
+
     public function visibility(UpdateShoppingListVisibilityRequest $request, ShoppingList $shoppingList): ShoppingListResource
     {
         return new ShoppingListResource($this->lists->changeVisibility(

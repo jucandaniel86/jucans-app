@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ShoppingListQuickAdd from '@/components/shopping/ShoppingListQuickAdd.vue'
 import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
+import { useNotificationStore } from '@/stores/notifications'
 import type { ActiveShoppingList } from '@/types/shopping'
 
 describe('shopping list quick add', () => {
@@ -37,7 +38,7 @@ describe('shopping list quick add', () => {
     ).toEqual(['', '', ''])
   })
 
-  it('allows a name alone and keeps fields with inline feedback on failure', async () => {
+  it('allows a name alone and keeps fields with global feedback on failure', async () => {
     const store = useActiveShoppingListStore()
     const add = vi
       .spyOn(store, 'addManualItem')
@@ -48,7 +49,8 @@ describe('shopping list quick add', () => {
     await wrapper.get('input[name="name"]').setValue('Șervețele')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(wrapper.get('[role="alert"]').text()).toContain('Nu am putut adăuga')
+    expect(useNotificationStore().notifications.at(-1)?.message).toContain('Nu am putut adăuga')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     expect((wrapper.get('input[name="name"]').element as HTMLInputElement).value).toBe('Șervețele')
     expect(add).toHaveBeenCalledWith({ name: 'Șervețele', quantity: null, unit: null })
     await wrapper.get('form').trigger('submit')

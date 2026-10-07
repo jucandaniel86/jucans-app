@@ -4,8 +4,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 
-const mocks = vi.hoisted(() => ({ getActive: vi.fn(), getConfig: vi.fn() }))
-vi.mock('@/services/shoppingApi', () => ({ shoppingApi: { getActive: mocks.getActive } }))
+const mocks = vi.hoisted(() => ({ getOpen: vi.fn(), getList: vi.fn(), getConfig: vi.fn() }))
+vi.mock('@/services/shoppingApi', () => ({ shoppingApi: { getOpen: mocks.getOpen, getList: mocks.getList } }))
 vi.mock('@/services/foodApi', () => ({ foodApi: { getConfig: mocks.getConfig } }))
 let route: { name: string; fullPath: string; meta: { requiresAdmin?: boolean } }
 vi.mock('vue-router', () => ({
@@ -19,11 +19,14 @@ describe('shopping preview shell placement', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     route = reactive({ name: 'recipes', fullPath: '/recipes', meta: {} })
-    mocks.getActive
+    mocks.getOpen.mockReset().mockResolvedValue({ data: [{ id: 1, status: 'open', is_creator: true }] })
+    mocks.getList
       .mockReset()
       .mockResolvedValue({
         data: {
           id: 1,
+          status: 'open',
+          is_creator: true,
           items: [{ id: 1, name: 'Lapte', quantity: null, shopping_category: null }],
           items_count: 1,
           recipes_count: 1,
@@ -41,7 +44,8 @@ describe('shopping preview shell placement', () => {
     route.fullPath = '/recipes/12'
     await flushPromises()
     expect(wrapper.find('.floating-shopping').exists()).toBe(true)
-    expect(mocks.getActive).toHaveBeenCalledTimes(1)
+    expect(mocks.getOpen).toHaveBeenCalledTimes(1)
+    expect(mocks.getList).toHaveBeenCalledTimes(1)
     route.name = 'shopping-list'
     route.fullPath = '/shopping-list'
     await flushPromises()

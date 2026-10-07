@@ -20,6 +20,7 @@ vi.mock('vue-router', () => ({
 
 import RecipeCard from '@/components/recipe/RecipeCard.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useNotificationStore } from '@/stores/notifications'
 import type { RecipeSummary } from '@/types/food'
 
 const recipe: RecipeSummary = {
@@ -96,7 +97,8 @@ describe('RecipeCard', () => {
 
     expect(shoppingMocks.addRecipe).toHaveBeenCalledWith(12)
     expect(routerMocks.push).not.toHaveBeenCalled()
-    expect(wrapper.find('[role="status"]').text()).toBe('Adăugat în lista de cumpărături')
+    expect(useNotificationStore().notifications.at(-1)?.message).toBe('Adăugat în lista de cumpărături')
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
   })
 
   it('prevents duplicate clicks while adding', async () => {
@@ -123,7 +125,7 @@ describe('RecipeCard', () => {
     const wrapper = mount(RecipeCard, { props: { recipe } })
     await wrapper.find('.recipe-card__footer button').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[role="status"]').text()).toBe('Rețeta este deja în listă')
+    expect(useNotificationStore().notifications.at(-1)).toMatchObject({ type: 'info', message: 'Rețeta este deja în listă' })
   })
 
   it('shows review errors with ingredient names and allows retry', async () => {
@@ -136,14 +138,14 @@ describe('RecipeCard', () => {
     const button = wrapper.find('.recipe-card__footer button')
     await button.trigger('click')
     await flushPromises()
-    expect(wrapper.find('[role="alert"]').text()).toContain(
+    expect(useNotificationStore().notifications.at(-1)?.message).toContain(
       'Unele ingrediente necesită verificare.',
     )
-    expect(wrapper.find('[role="alert"]').text()).toContain('Lapte')
+    expect(useNotificationStore().notifications.at(-1)?.message).toContain('Lapte')
     await button.trigger('click')
     await flushPromises()
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
-    expect(wrapper.find('[role="status"]').exists()).toBe(true)
+    expect(useNotificationStore().notifications.at(-1)?.type).toBe('success')
     expect(routerMocks.push).not.toHaveBeenCalled()
   })
 })

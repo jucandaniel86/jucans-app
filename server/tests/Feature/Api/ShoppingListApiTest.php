@@ -177,7 +177,7 @@ class ShoppingListApiTest extends TestCase
         $this->postJson('/api/shopping-lists')->assertUnauthorized();
     }
 
-    public function test_active_list_exposes_item_snapshots_quantities_and_categories_without_sources(): void
+    public function test_active_list_exposes_item_snapshots_quantities_categories_and_sources(): void
     {
         $creator = $this->createUser('creator');
         $list = $this->createList($creator);
@@ -210,7 +210,7 @@ class ShoppingListApiTest extends TestCase
             ->assertJsonPath('data.items.0.shopping_category.sort_order', 2)
             ->assertJsonPath('data.items.1.quantity', null)
             ->assertJsonPath('data.items.1.shopping_category', null)
-            ->assertJsonMissingPath('data.items.0.sources');
+            ->assertJsonPath('data.items.0.sources', []);
     }
 
     /**

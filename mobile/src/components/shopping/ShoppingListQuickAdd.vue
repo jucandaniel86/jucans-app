@@ -2,8 +2,12 @@
 import { nextTick, ref, useId } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
+import { useNotificationStore } from '@/stores/notifications'
+import { actionErrorMessage } from '@/utils/actionError'
+import { ApiError } from '@/services/api'
 
 const shopping = useActiveShoppingListStore()
+const notifications = useNotificationStore()
 const id = useId()
 const expanded = ref(false)
 const name = ref('')
@@ -49,8 +53,16 @@ async function save(): Promise<void> {
     quantity.value = ''
     unit.value = ''
     await collapse()
-  } catch {
-    error.value = 'Nu am putut adăuga produsul. Încearcă din nou.'
+    notifications.success('Produsul a fost adăugat.')
+  } catch (failure) {
+    if (failure instanceof ApiError && failure.status === 422 &&
+      Object.keys(failure.errors).some((field) => ['name', 'quantity', 'unit'].includes(field))) {
+      error.value = 'Verifică produsul, cantitatea și unitatea.'
+      return
+    }
+    notifications.error(
+      actionErrorMessage(failure, 'Nu am putut adăuga produsul. Încearcă din nou.'),
+    )
   }
 }
 </script>

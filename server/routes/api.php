@@ -30,10 +30,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/ingredients/aliases', [IngredientAliasController::class, 'store']);
     Route::apiResource('recipes', RecipeController::class);
     Route::get('/shopping-lists/active', [ShoppingListController::class, 'active']);
+    Route::get('/shopping-lists/open', [ShoppingListController::class, 'open']);
+    Route::get('/shopping-lists/shareable-users', [ShoppingListSharingController::class, 'shareableUsers']);
     Route::get('/shopping-lists', [ShoppingListController::class, 'index']);
     Route::post('/shopping-lists/active/close', [ShoppingListController::class, 'close']);
     Route::get('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'show']);
     Route::post('/shopping-lists', [ShoppingListController::class, 'store']);
+    Route::post('/shopping-lists/{shoppingList}/close', [ShoppingListController::class, 'closeList'])->whereNumber('shoppingList');
+    Route::get('/shopping-lists/{shoppingList}/export', [ShoppingListController::class, 'export'])->whereNumber('shoppingList');
+    Route::post('/shopping-lists/{shoppingList}/recipes/{recipe}', [ShoppingListController::class, 'addRecipeToList'])->whereNumber('shoppingList');
+    Route::post('/shopping-lists/{shoppingList}/items', [ShoppingListController::class, 'storeListItem'])->whereNumber('shoppingList');
+    Route::patch('/shopping-lists/{shoppingList}/items/{item}', [ShoppingListController::class, 'updateListItem'])->whereNumber('shoppingList');
+    Route::delete('/shopping-lists/{shoppingList}/items/{item}', [ShoppingListController::class, 'destroyListItem'])->whereNumber('shoppingList');
     Route::post('/shopping-lists/active/recipes/{recipe}', [ShoppingListController::class, 'addRecipe']);
     Route::delete('/shopping-lists/{shoppingList}/recipes/{recipe}', [ShoppingListController::class, 'removeRecipe']);
     Route::post('/shopping-lists/active/items', [ShoppingListController::class, 'storeItem']);

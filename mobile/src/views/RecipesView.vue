@@ -1,25 +1,39 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import RecipeCard from '@/components/recipe/RecipeCard.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { foodApi } from '@/services/foodApi'
-import type { PaginationMeta, RecipeSummary } from '@/types/food'
+import type { FoodTag, PaginationMeta, RecipeSummary } from '@/types/food'
 
+const route = useRoute()
+const router = useRouter()
+const tags = ref<FoodTag[]>([])
+const tagsError = ref(false)
 const recipes = ref<RecipeSummary[]>([])
 const pagination = ref<PaginationMeta | null>(null)
-const search = ref('')
+const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const loading = ref(true)
 const loadingMore = ref(false)
 const error = ref('')
 let debounceTimer: ReturnType<typeof setTimeout> | undefined
 let requestSequence = 0
+let syncingRoute = false
 
 const searchTerm = computed(() => search.value.trim())
+const selectedTags = computed(() => [
+  ...new Set(
+    (typeof route.query.tags === 'string' ? route.query.tags : '')
+      .split(',')
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0),
+  ),
+])
+const hasFilters = computed(() => Boolean(searchTerm.value || selectedTags.value.length))
 const total = computed(() => pagination.value?.total ?? 0)
-const canLoadMore = computed(
-  () => Boolean(pagination.value && pagination.value.current_page < pagination.value.last_page),
+const canLoadMore = computed(() =>
+  Boolean(pagination.value && pagination.value.current_page < pagination.value.last_page),
 )
 const resultLabel = computed(() => {
   const noun = total.value === 1 ? 'rețetă' : 'rețete'
@@ -38,6 +52,7 @@ async function loadRecipes(page = 1, append = false): Promise<void> {
   try {
     const response = await foodApi.listRecipes({
       search: searchTerm.value || undefined,
+      tags: selectedTags.value,
       page,
     })
 
@@ -61,12 +76,65 @@ async function loadRecipes(page = 1, append = false): Promise<void> {
   }
 }
 
-watch(search, () => {
-  window.clearTimeout(debounceTimer)
-  debounceTimer = window.setTimeout(() => loadRecipes(), 350)
-})
+function updateFilters(query = searchTerm.value, ids = selectedTags.value): void {
+  if (query === (route.query.q ?? '') && ids.join(',') === (route.query.tags ?? '')) {
+    void loadRecipes()
+    return
+  }
+  void router.replace({
+    query: { ...route.query, q: query || undefined, tags: ids.length ? ids.join(',') : undefined },
+  })
+}
 
-onMounted(() => loadRecipes())
+function toggleTag(id: number): void {
+  window.clearTimeout(debounceTimer)
+  updateFilters(
+    searchTerm.value,
+    selectedTags.value.includes(id)
+      ? selectedTags.value.filter((selected) => selected !== id)
+      : [...selectedTags.value, id],
+  )
+}
+
+function resetFilters(): void {
+  window.clearTimeout(debounceTimer)
+  search.value = ''
+  updateFilters('', [])
+}
+
+watch(
+  search,
+  () => {
+    if (syncingRoute) return
+    requestSequence++
+    loading.value = true
+    window.clearTimeout(debounceTimer)
+    debounceTimer = window.setTimeout(() => updateFilters(), 350)
+  },
+  { flush: 'sync' },
+)
+
+watch(
+  () => [route.query.q, route.query.tags],
+  () => {
+    window.clearTimeout(debounceTimer)
+    syncingRoute = true
+    search.value = typeof route.query.q === 'string' ? route.query.q : ''
+    syncingRoute = false
+    void loadRecipes()
+  },
+  { immediate: true },
+)
+
+async function loadTags(): Promise<void> {
+  tagsError.value = false
+  try {
+    tags.value = (await foodApi.listTags()).data
+  } catch {
+    tagsError.value = true
+  }
+}
+onMounted(loadTags)
 onBeforeUnmount(() => {
   window.clearTimeout(debounceTimer)
   requestSequence++
@@ -80,7 +148,11 @@ onBeforeUnmount(() => {
         <p>Food</p>
         <h1>Rețetele noastre <span aria-hidden="true">🍳</span></h1>
       </div>
-      <RouterLink class="recipes-page__add" :to="{ name: 'recipe-create' }" aria-label="Adaugă rețetă">
+      <RouterLink
+        class="recipes-page__add"
+        :to="{ name: 'recipe-create' }"
+        aria-label="Adaugă rețetă"
+      >
         <span aria-hidden="true">+</span>
       </RouterLink>
     </header>
@@ -95,6 +167,28 @@ onBeforeUnmount(() => {
         placeholder="Caută o rețetă sau un ingredient..."
       />
     </label>
+
+    <div class="recipes-page__filters" aria-label="Filtrează după taguri">
+      <button
+        type="button"
+        :aria-pressed="selectedTags.length === 0"
+        @click="updateFilters(searchTerm, [])"
+      >
+        Toate
+      </button>
+      <button
+        v-for="tag in tags"
+        :key="tag.id"
+        type="button"
+        :aria-pressed="selectedTags.includes(tag.id)"
+        @click="toggleTag(tag.id)"
+      >
+        {{ tag.emoji }} {{ tag.name }}
+      </button>
+    </div>
+    <button v-if="tagsError" type="button" class="recipes-page__reset" @click="loadTags">
+      Reîncarcă tagurile
+    </button>
 
     <p v-if="pagination && !loading" class="recipes-page__count" aria-live="polite">
       {{ resultLabel }}
@@ -113,8 +207,11 @@ onBeforeUnmount(() => {
       <AppButton variant="secondary" @click="loadRecipes()">Încearcă din nou</AppButton>
     </div>
 
-    <div v-else-if="recipes.length === 0 && searchTerm" class="recipes-state">
-      <h2>N-am găsit nicio rețetă pentru „{{ searchTerm }}”.</h2>
+    <div v-else-if="recipes.length === 0 && hasFilters" class="recipes-state">
+      <h2>Nicio rețetă nu corespunde filtrelor.</h2>
+      <button type="button" class="recipes-page__reset" @click="resetFilters">
+        Resetează filtrele
+      </button>
     </div>
 
     <div v-else-if="recipes.length === 0" class="recipes-state">
@@ -145,6 +242,47 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.recipes-page__filters {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  margin-top: calc(var(--space-3) * -1);
+  padding: 2px 0 4px;
+}
+.recipes-page__filters button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 18px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.recipes-page__filters button:nth-child(3n) {
+  background: #fce5ee;
+}
+.recipes-page__filters button:nth-child(3n + 1) {
+  background: #e3f4ee;
+}
+.recipes-page__filters button:nth-child(3n + 2) {
+  background: #fff0ce;
+}
+.recipes-page__filters button[aria-pressed='true'] {
+  background: var(--color-primary-strong);
+  border-color: var(--color-primary-strong);
+  color: #fff;
+}
+.recipes-page__reset {
+  border: 0;
+  padding: 8px 0;
+  color: var(--color-primary-strong);
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
 .recipes-page {
   display: grid;
   gap: var(--space-5);

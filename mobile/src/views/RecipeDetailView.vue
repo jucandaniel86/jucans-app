@@ -1,26 +1,45 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import jucansPlaceholder from '@/assets/jucans_logo.png'
 import AppButton from '@/components/ui/AppButton.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
+import RecipeSearch from '@/components/recipe/RecipeSearch.vue'
 import { foodApi } from '@/services/foodApi'
 import { useAddRecipeToShoppingList } from '@/composables/useAddRecipeToShoppingList'
+import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
+import ShoppingListAccess from '@/components/shopping/ShoppingListAccess.vue'
+import { shoppingListName } from '@/utils/shoppingPresentation'
 import type { FoodUnit, RecipeDetail } from '@/types/food'
-import { recipeIngredientLabel, recipeSourceLabel } from '@/utils/recipePresentation'
+import { recipeIngredientLabel } from '@/utils/recipePresentation'
 
 const route = useRoute()
+const shopping = useActiveShoppingListStore()
 const router = useRouter()
 const recipe = ref<RecipeDetail | null>(null)
 const units = ref<Record<string, FoodUnit>>({})
 const loading = ref(true)
 const error = ref('')
-const { adding, shoppingMessage, shoppingError, reviewNames, addToList } =
-  useAddRecipeToShoppingList(() => recipe.value?.id ?? null)
+let requestSequence = 0
+const source = computed(() => {
+  if (!recipe.value?.url) return null
+  try {
+    const url = new URL(recipe.value.url)
+    if (!['https:', 'http:'].includes(url.protocol)) return null
+    const host = url.hostname.toLowerCase()
+    const youtube = host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com')
+    return { url: url.href, label: youtube ? '▶ Vezi pe YouTube' : '↗ Vezi sursa' }
+  } catch {
+    return null
+  }
+})
+const { adding, addToList } = useAddRecipeToShoppingList(() => recipe.value?.id ?? null)
 
 async function loadRecipe(): Promise<void> {
+  const sequence = ++requestSequence
   const recipeId = Number(route.params.id)
+  recipe.value = null
 
   if (!Number.isInteger(recipeId) || recipeId < 1) {
     error.value = 'Rețeta nu este validă.'
@@ -36,23 +55,30 @@ async function loadRecipe(): Promise<void> {
       foodApi.getRecipe(recipeId),
       foodApi.getConfig(),
     ])
+    if (sequence !== requestSequence) return
     recipe.value = recipeResponse.data
     units.value = config.units
   } catch {
-    error.value = 'Nu am putut încărca rețeta.'
+    if (sequence === requestSequence) error.value = 'Nu am putut încărca rețeta.'
   } finally {
-    loading.value = false
+    if (sequence === requestSequence) loading.value = false
   }
 }
 
-onMounted(loadRecipe)
+watch(() => route.params.id, loadRecipe, { immediate: true })
+onBeforeUnmount(() => {
+  requestSequence++
+})
 </script>
 
 <template>
   <section class="recipe-detail">
-    <div class="recipe-detail__toolbar">
-      <button type="button" aria-label="Înapoi" @click="router.back()">‹</button>
-      <RouterLink :to="{ name: 'recipes' }">Toate rețetele</RouterLink>
+    <div class="recipe-detail__navigation">
+      <div class="recipe-detail__toolbar">
+        <button type="button" aria-label="Înapoi" @click="router.back()">‹</button>
+        <RouterLink :to="{ name: 'recipes' }">Toate rețetele</RouterLink>
+      </div>
+      <RecipeSearch />
     </div>
 
     <div v-if="loading" class="recipe-detail__loading" aria-label="Se încarcă rețeta">
@@ -103,18 +129,23 @@ onMounted(loadRecipe)
         <span>Adăugată de {{ recipe.creator.username }}</span>
       </div>
 
+      <a
+        v-if="source"
+        class="recipe-detail__source"
+        :href="source.url"
+        target="_blank"
+        rel="noopener noreferrer"
+        >{{ source.label }}</a
+      >
+
       <div class="recipe-detail__shopping">
         <AppButton variant="secondary" :loading="adding" @click="addToList">
           <span aria-hidden="true">🛒</span> Adaugă la listă
         </AppButton>
-        <RouterLink :to="{ name: 'shopping-list' }">Deschide lista</RouterLink>
-        <p v-if="shoppingMessage" class="recipe-detail__shopping-success" role="status">
-          {{ shoppingMessage }}
-        </p>
-        <div v-if="shoppingError" class="recipe-detail__shopping-error" role="alert">
-          <p>{{ shoppingError }}</p>
-          <small v-if="reviewNames.length">{{ reviewNames.join(' · ') }}</small>
-        </div>
+        <RouterLink :to="{ name: shopping.list ? 'shopping-list' : 'shopping-lists' }">{{
+          shopping.list ? shoppingListName(shopping.list) : 'Alege lista'
+        }}</RouterLink>
+        <ShoppingListAccess v-if="shopping.list" :list="shopping.list" />
       </div>
 
       <section v-if="recipe.description" class="recipe-detail__section">
@@ -137,22 +168,20 @@ onMounted(loadRecipe)
         </ul>
         <p v-else class="recipe-detail__muted">Nu sunt ingrediente salvate.</p>
       </section>
-
-      <a
-        v-if="recipe.url"
-        class="recipe-detail__source"
-        :href="recipe.url"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        {{ recipeSourceLabel(recipe.url) }}
-        <span aria-hidden="true">↗</span>
-      </a>
     </template>
   </section>
 </template>
 
 <style scoped>
+.recipe-detail__navigation {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.recipe-detail__source {
+  justify-self: start;
+  margin-top: calc(var(--space-3) * -1);
+}
 .recipe-detail__shopping {
   display: flex;
   flex-wrap: wrap;
@@ -169,23 +198,6 @@ onMounted(loadRecipe)
   color: var(--color-primary-strong);
   font-size: 0.85rem;
   font-weight: 700;
-}
-.recipe-detail__shopping-success,
-.recipe-detail__shopping-error {
-  flex-basis: 100%;
-  margin: 0;
-  font-size: 0.86rem;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-.recipe-detail__shopping-success {
-  color: var(--color-success);
-}
-.recipe-detail__shopping-error {
-  color: var(--color-error);
-}
-.recipe-detail__shopping-error p {
-  margin: 0;
 }
 .recipe-detail {
   display: grid;
@@ -361,16 +373,14 @@ onMounted(loadRecipe)
 
 .recipe-detail__source {
   display: flex;
-  min-height: 48px;
+  min-height: 32px;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
+  padding: 0;
   color: var(--color-primary-strong);
   font-weight: 750;
   text-decoration: none;
-  background: var(--color-surface);
+  font-size: 0.86rem;
 }
 
 .recipe-detail__loading {

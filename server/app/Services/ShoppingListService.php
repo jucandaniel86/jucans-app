@@ -41,11 +41,12 @@ class ShoppingListService
             ->with('creator:id,username,avatar')->withExists($this->membershipCount($user));
     }
 
-    public function getOrCreateActive(User $user): array
+    public function getOrCreateOwnedOpen(User $user): array
     {
         return DB::transaction(function () use ($user): array {
             $user = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
-            $existingList = $this->resolveActiveList($user, true);
+            $existingList = ShoppingList::query()->where('created_by', $user->id)
+                ->where('status', 'open')->lockForUpdate()->first();
 
             if ($existingList !== null) {
                 return [$existingList, false];
@@ -88,6 +89,14 @@ class ShoppingListService
             if ($list === null) {
                 return null;
             }
+            return $this->closeList($user, $list);
+        });
+    }
+
+    public function closeList(User $user, ShoppingList $list): ShoppingList
+    {
+        return DB::transaction(function () use ($user, $list): ShoppingList {
+            $list = ShoppingList::query()->whereKey($list->id)->lockForUpdate()->firstOrFail();
             Gate::forUser($user)->authorize('close', $list);
             $list->update(['status' => 'closed', 'closed_at' => now()]);
 
@@ -95,12 +104,20 @@ class ShoppingListService
         });
     }
 
-    public function updateItemChecked(User $user, ShoppingListItem $item, bool $checked): ShoppingListItem
+    public function editableList(User $user, ?ShoppingList $target = null): ShoppingList
     {
-        return DB::transaction(function () use ($user, $item, $checked): ShoppingListItem {
-            $list = $this->resolveActiveList($user, true);
-            abort_if($list === null, 404);
-            Gate::forUser($user)->authorize('update', $list);
+        $list = $target === null ? $this->resolveActiveList($user, true)
+            : ShoppingList::query()->whereKey($target->id)->lockForUpdate()->firstOrFail();
+        abort_if($list === null, 404);
+        Gate::forUser($user)->authorize('update', $list);
+
+        return $list;
+    }
+
+    public function updateItemChecked(User $user, ShoppingListItem $item, bool $checked, ?ShoppingList $target = null): ShoppingListItem
+    {
+        return DB::transaction(function () use ($user, $item, $checked, $target): ShoppingListItem {
+            $list = $this->editableList($user, $target);
             $item = $list->items()->whereKey($item->id)->lockForUpdate()->firstOrFail();
 
             DB::table('shopping_list_items')->where('id', $item->id)->update(['is_checked' => $checked]);
@@ -109,12 +126,89 @@ class ShoppingListService
         });
     }
 
-    public function addManualItem(User $user, array $attributes): ShoppingListItem
+    public function updateItem(User $user, ShoppingListItem $item, array $attributes, ?ShoppingList $target = null): ShoppingListItem
     {
-        return DB::transaction(function () use ($user, $attributes): ShoppingListItem {
-            $list = $this->resolveActiveList($user, true);
-            abort_if($list === null, 404);
-            Gate::forUser($user)->authorize('update', $list);
+        return DB::transaction(function () use ($user, $item, $attributes, $target): ShoppingListItem {
+            $list = $this->editableList($user, $target);
+            $item = $list->items()->withCount('sources')->whereKey($item->id)->lockForUpdate()->firstOrFail();
+
+            $changes = [];
+            if (array_key_exists('is_checked', $attributes)) {
+                $changes['is_checked'] = (bool) $attributes['is_checked'];
+            }
+
+            if ($this->isManualItem($item)) {
+                foreach (['name', 'quantity', 'unit'] as $field) {
+                    if (array_key_exists($field, $attributes)) {
+                        $changes[$field] = $attributes[$field];
+                    }
+                }
+            } elseif (array_key_exists('reset_quantity', $attributes) && $attributes['reset_quantity']) {
+                $changes['quantity'] = $item->calculated_quantity;
+                $changes['quantity_overridden'] = false;
+            } elseif (array_key_exists('quantity', $attributes)) {
+                $changes['quantity'] = $attributes['quantity'];
+                $changes['quantity_overridden'] = true;
+            }
+
+            abort_if($changes === [], 422, 'This shopping list item cannot be updated with the provided fields.');
+            DB::table('shopping_list_items')->where('id', $item->id)->update($changes);
+
+            return $item->refresh()->load(['shoppingCategory', 'sources']);
+        });
+    }
+
+    public function deleteManualItem(User $user, ShoppingListItem $item, ShoppingList $target): void
+    {
+        DB::transaction(function () use ($user, $item, $target): void {
+            $list = $this->editableList($user, $target);
+            $item = $list->items()->withCount('sources')->whereKey($item->id)->lockForUpdate()->firstOrFail();
+            abort_unless($this->isManualItem($item), 422, 'Recipe-generated shopping list items cannot be deleted directly.');
+            $item->delete();
+        });
+    }
+
+    public function exportUnchecked(User $user, ShoppingList $target): ?string
+    {
+        $list = $this->accessibleListQuery($user)->whereKey($target->id)->firstOrFail();
+        Gate::forUser($user)->authorize('view', $list);
+        $items = $list->items()
+            ->with('shoppingCategory')
+            ->where('is_checked', false)
+            ->get()
+            ->sort(function (ShoppingListItem $a, ShoppingListItem $b): int {
+                return ($a->shoppingCategory?->sort_order ?? PHP_INT_MAX) <=> ($b->shoppingCategory?->sort_order ?? PHP_INT_MAX)
+                    ?: strcoll($a->shoppingCategory?->name ?? 'Diverse', $b->shoppingCategory?->name ?? 'Diverse')
+                    ?: strcoll($a->name, $b->name);
+            })
+            ->values();
+        if ($items->isEmpty()) {
+            return null;
+        }
+
+        $lines = ['LISTA DE CUMPĂRĂTURI', ''];
+        $currentCategory = null;
+        foreach ($items as $item) {
+            $categoryKey = $item->shopping_category_id ?? 0;
+            if ($categoryKey !== $currentCategory) {
+                if ($currentCategory !== null) {
+                    $lines[] = '';
+                }
+                $currentCategory = $categoryKey;
+                $emoji = $item->shoppingCategory?->emoji ?: '📦';
+                $name = $item->shoppingCategory?->name ?: 'Diverse';
+                $lines[] = trim($emoji.' '.$name);
+            }
+            $lines[] = $this->exportItemLine($item);
+        }
+
+        return implode("\n", $lines)."\n";
+    }
+
+    public function addManualItem(User $user, array $attributes, ?ShoppingList $target = null): ShoppingListItem
+    {
+        return DB::transaction(function () use ($user, $attributes, $target): ShoppingListItem {
+            $list = $this->editableList($user, $target);
 
             return $list->items()->create([
                 'ingredient_id' => null,
@@ -127,6 +221,37 @@ class ShoppingListService
                 'quantity_overridden' => true,
             ])->load('shoppingCategory');
         });
+    }
+
+    private function isManualItem(ShoppingListItem $item): bool
+    {
+        return $item->ingredient_id === null && (int) ($item->sources_count ?? $item->sources()->count()) === 0;
+    }
+
+    private function exportItemLine(ShoppingListItem $item): string
+    {
+        $quantity = $this->exportQuantity($item);
+
+        return $quantity === '' ? $item->name : $item->name.' — '.$quantity;
+    }
+
+    private function exportQuantity(ShoppingListItem $item): string
+    {
+        if ($item->unit === 'to_taste') {
+            return 'după gust';
+        }
+
+        if ($item->quantity === null) {
+            return '';
+        }
+
+        $quantity = rtrim(rtrim((string) $item->quantity, '0'), '.');
+        $unit = $item->unit;
+        if ($unit === null || $unit === 'none') {
+            return $quantity;
+        }
+
+        return trim($quantity.' '.$unit);
     }
 
     public function changeVisibility(User $user, ShoppingList $list, string $visibility): ShoppingList

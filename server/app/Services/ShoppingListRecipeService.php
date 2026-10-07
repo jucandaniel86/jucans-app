@@ -14,12 +14,13 @@ class ShoppingListRecipeService
 {
     public function __construct(private readonly ShoppingListService $lists) {}
 
-    public function add(User $user, Recipe $recipe): array
+    public function add(User $user, Recipe $recipe, ?ShoppingList $target = null): array
     {
-        return DB::transaction(function () use ($user, $recipe): array {
+        return DB::transaction(function () use ($user, $recipe, $target): array {
             $user = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
             // The list lock also serializes additions made by different shared-list members.
-            $list = $this->lists->resolveActiveList($user, true);
+            $list = $target === null ? $this->lists->resolveActiveList($user, true)
+                : $this->lists->editableList($user, $target);
             if ($list !== null) {
                 Gate::forUser($user)->authorize('update', $list);
             }
@@ -43,7 +44,7 @@ class ShoppingListRecipeService
                 }
 
                 if ($list === null) {
-                    [$list] = $this->lists->getOrCreateActive($user);
+                    [$list] = $this->lists->getOrCreateOwnedOpen($user);
                 }
 
                 // Recheck after acquiring the creation lock: another request may have added it.
@@ -81,11 +82,16 @@ class ShoppingListRecipeService
                 }
             }
 
+            $summary = $this->lists->loadSummaryCounts($list, $user);
+            if ($target !== null) {
+                $summary->load(['recipes', 'items.shoppingCategory', 'items.sources']);
+            }
+
             return [
-                'list' => $this->lists->loadSummaryCounts($list, $user),
+                'list' => $summary,
                 'recipe' => $recipe,
                 'already_present' => $alreadyPresent,
-                'items' => $list->items()->whereHas('sources', fn ($query) => $query->where('recipe_id', $recipe->id))
+                'items' => $target !== null ? $summary->items : $list->items()->whereHas('sources', fn ($query) => $query->where('recipe_id', $recipe->id))
                     ->with(['shoppingCategory', 'sources'])->orderBy('id')->get(),
             ];
         });
@@ -94,8 +100,7 @@ class ShoppingListRecipeService
     public function remove(User $user, ShoppingList $list, Recipe $recipe): ShoppingList
     {
         return DB::transaction(function () use ($user, $list, $recipe): ShoppingList {
-            $list = ShoppingList::query()->whereKey($list->id)->lockForUpdate()->firstOrFail();
-            Gate::forUser($user)->authorize('update', $list);
+            $list = $this->lists->editableList($user, $list);
             abort_unless($list->recipes()->whereKey($recipe->id)->exists(), 404, 'Recipe is not attached to this shopping list.');
 
             $items = $list->items()->whereHas('sources', fn ($query) => $query->where('recipe_id', $recipe->id))

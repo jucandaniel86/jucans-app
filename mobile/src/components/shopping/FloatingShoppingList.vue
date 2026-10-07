@@ -5,6 +5,11 @@ import ShoppingItemGroups from '@/components/shopping/ShoppingItemGroups.vue'
 import ShoppingListQuickAdd from '@/components/shopping/ShoppingListQuickAdd.vue'
 import ShoppingListTabs from '@/components/shopping/ShoppingListTabs.vue'
 import ShoppingListRecipes from '@/components/shopping/ShoppingListRecipes.vue'
+import ShoppingListVisibilityBadge from '@/components/shopping/ShoppingListVisibilityBadge.vue'
+import { shoppingListName, shoppingListOwnerLabel } from '@/utils/shoppingPresentation'
+import { exportShoppingListText } from '@/utils/shoppingExport'
+import { useNotificationStore } from '@/stores/notifications'
+import { actionErrorMessage } from '@/utils/actionError'
 import type { ShoppingListTab } from '@/types/shopping'
 import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
 
@@ -18,6 +23,8 @@ const tab = ref<ShoppingListTab>('shopping')
 const content = ref<HTMLElement | null>(null)
 const panel = ref<HTMLElement | null>(null)
 const toggle = ref<HTMLButtonElement | null>(null)
+const exporting = ref(false)
+const notifications = useNotificationStore()
 let observer: ResizeObserver | undefined
 
 onMounted(() => {
@@ -31,6 +38,18 @@ onMounted(() => {
 
 function collapse(): void {
   emit('update:expanded', false)
+}
+async function exportCurrent(): Promise<void> {
+  if (!shopping.list || exporting.value) return
+  exporting.value = true
+  try {
+    const result = await exportShoppingListText(shopping.list.id)
+    if (result === 'empty') notifications.info('Nu mai sunt produse de cumpărat.')
+  } catch (failure) {
+    notifications.error(actionErrorMessage(failure, 'Nu am putut exporta lista.'))
+  } finally {
+    exporting.value = false
+  }
 }
 function keydown(event: KeyboardEvent): void {
   if (!props.expanded) return
@@ -72,7 +91,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <template v-if="shopping.hasItems || (expanded && shopping.list)">
+  <template v-if="shopping.list && (expanded || shopping.list.items.length > 0)">
     <button
       v-if="expanded"
       class="floating-shopping__backdrop"
@@ -87,7 +106,7 @@ onBeforeUnmount(() => {
       :class="{ 'floating-shopping--expanded': expanded }"
       :role="expanded ? 'dialog' : undefined"
       :aria-modal="expanded ? true : undefined"
-      aria-label="Lista de cumpărături activă"
+      aria-label="Lista de cumpărături curentă"
       @keydown="keydown"
     >
       <ShoppingListQuickAdd v-if="!expanded" class="floating-shopping__quick-add--external" />
@@ -100,13 +119,21 @@ onBeforeUnmount(() => {
         @click="emit('update:expanded', !expanded)"
       >
         <span class="floating-shopping__icon" aria-hidden="true">🛒</span>
-        <span class="floating-shopping__heading"
-          ><strong>Lista de cumpărături</strong><small>{{ shopping.remainingSummary }}</small></span
-        >
+        <span class="floating-shopping__heading">
+          <span class="floating-shopping__title">
+            <strong>{{ shoppingListName(shopping.list) }}</strong>
+            <ShoppingListVisibilityBadge :list="shopping.list" />
+          </span>
+          <small>{{ shopping.remainingSummary }}</small>
+          <small>{{ shoppingListOwnerLabel(shopping.list) }}</small>
+        </span>
         <span class="floating-shopping__chevron" aria-hidden="true">{{
           expanded ? '⌄' : '⌃'
         }}</span>
       </button>
+      <div v-if="!expanded" class="floating-shopping__collapsed-action">
+        <button type="button" :disabled="exporting" @click="exportCurrent">↗ Export</button>
+      </div>
       <template v-if="expanded">
         <ShoppingListTabs
           v-model="tab"
@@ -194,10 +221,10 @@ onBeforeUnmount(() => {
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   width: 100%;
   min-height: 72px;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   border: 0;
   text-align: left;
   background: var(--color-surface);
@@ -208,11 +235,20 @@ onBeforeUnmount(() => {
   font-size: 1.4rem;
 }
 .floating-shopping__heading {
+  flex: 1;
   min-width: 0;
   display: grid;
-  gap: var(--space-1);
+  gap: 2px;
 }
-.floating-shopping__heading strong {
+.floating-shopping__title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.floating-shopping__title strong {
+  min-width: 0;
   font-size: 0.9rem;
   overflow-wrap: anywhere;
 }
@@ -225,6 +261,36 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   color: var(--color-primary-strong);
   font-size: 1.4rem;
+}
+.floating-shopping__collapsed-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-height: 30px;
+  padding: 0 var(--space-4) var(--space-2) 52px;
+  margin-top: calc(var(--space-2) * -1);
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+}
+.floating-shopping__collapsed-action span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.floating-shopping__collapsed-action button {
+  flex-shrink: 0;
+  min-height: 30px;
+  border: 0;
+  padding: 0;
+  color: var(--color-primary-strong);
+  background: transparent;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.floating-shopping__collapsed-action button:disabled {
+  opacity: 0.55;
+  cursor: wait;
 }
 .floating-shopping__items {
   min-height: 0;

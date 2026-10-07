@@ -18,8 +18,7 @@ const router = useRouter()
 const visibleTags = computed(() => props.recipe.tags.slice(0, 3))
 const remainingTags = computed(() => Math.max(0, props.recipe.tags.length - 3))
 const authStore = useAuthStore()
-const { adding, shoppingMessage, shoppingError, reviewNames, addToList } =
-  useAddRecipeToShoppingList(() => props.recipe.id)
+const { adding, addToList } = useAddRecipeToShoppingList(() => props.recipe.id)
 
 function openRecipe(): void {
   router.push({ name: 'recipe-detail', params: { id: props.recipe.id } })
@@ -75,14 +74,6 @@ function editRecipe(): void {
           {{ tag.emoji ? `${tag.emoji} ${tag.name}` : tag.name }}
         </span>
         <span v-if="remainingTags">+{{ remainingTags }}</span>
-      </div>
-
-      <p v-if="shoppingMessage" class="recipe-card__shopping-success" role="status" @click.stop>
-        {{ shoppingMessage }}
-      </p>
-      <div v-if="shoppingError" class="recipe-card__shopping-error" role="alert" @click.stop>
-        <p>{{ shoppingError }}</p>
-        <small v-if="reviewNames.length">{{ reviewNames.join(' · ') }}</small>
       </div>
     </div>
     <div class="recipe-card__footer">
@@ -264,26 +255,6 @@ function editRecipe(): void {
 .recipe-card__shopping-button :deep(.app-button__spinner) {
   border-color: var(--color-primary);
   border-top-color: var(--color-primary-strong);
-}
-
-.recipe-card__shopping-success,
-.recipe-card__shopping-error {
-  margin: 0;
-  font-size: 0.75rem;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.recipe-card__shopping-success {
-  color: var(--color-success);
-}
-
-.recipe-card__shopping-error {
-  color: var(--color-error);
-}
-
-.recipe-card__shopping-error p {
-  margin: 0;
 }
 
 @media (max-width: 390px) {

@@ -1,5 +1,5 @@
 import type { ShoppingCategory } from '@/types/food'
-import type { ShoppingItem, ShoppingListSummary } from '@/types/shopping'
+import type { ShoppingItem, ShoppingListSummary, ShoppingListVisibility } from '@/types/shopping'
 
 export function shoppingListName(
   list: Pick<ShoppingListSummary, 'name' | 'status' | 'closed_at'>,
@@ -19,6 +19,34 @@ export function shoppingListSummary(
 ): string {
   const { items_count: items, recipes_count: recipes } = list
   return `${items} ${items === 1 ? 'produs' : 'produse'} · ${recipes} ${recipes === 1 ? 'rețetă' : 'rețete'}`
+}
+
+export function shoppingListCreatorLabel(
+  list: Pick<ShoppingListSummary, 'is_creator'> & Partial<Pick<ShoppingListSummary, 'creator'>>,
+): string {
+  if (list.is_creator) return 'Creată de tine'
+  return `Creată de ${list.creator?.name ?? 'altcineva'}`
+}
+
+export function shoppingListOwnerLabel(
+  list: Pick<ShoppingListSummary, 'is_creator'> & Partial<Pick<ShoppingListSummary, 'creator'>>,
+): string {
+  if (list.is_creator) return 'Lista ta'
+  return shoppingListCreatorLabel(list)
+}
+
+export function shoppingListVisibilityLabel(
+  list: Pick<ShoppingListSummary, 'visibility'> &
+    Partial<Pick<ShoppingListSummary, 'is_shared_with_me' | 'creator'>>,
+): string {
+  const labels: Record<ShoppingListVisibility, string> = {
+    private: 'Privată',
+    shared: 'Partajată',
+    public: 'Publică',
+  }
+  if (list.visibility !== 'shared') return labels[list.visibility]
+  if (list.is_shared_with_me) return 'Partajată cu tine'
+  return labels.shared
 }
 
 export function groupShoppingItems(items: ShoppingItem[]) {

@@ -2,14 +2,17 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
+import { ApiError } from '@/services/api'
 import type { ActiveShoppingList } from '@/types/shopping'
 
 const mocks = vi.hoisted(() => ({
-  getActive: vi.fn(),
+  getOpen: vi.fn(),
+  getList: vi.fn(),
+  createOwn: vi.fn(),
   addRecipe: vi.fn(),
   getConfig: vi.fn(),
   setItemChecked: vi.fn(),
-  closeActive: vi.fn(),
+  closeList: vi.fn(),
   addManualItem: vi.fn(),
   removeRecipe: vi.fn(),
 }))
@@ -29,77 +32,239 @@ const item = {
   calculated_quantity: '1.000',
   quantity_overridden: false,
 }
-const list: ActiveShoppingList = {
-  id: 1,
-  name: null,
+const own: ActiveShoppingList = {
+  id: 10,
+  name: 'Daniel',
   status: 'open',
   visibility: 'private',
   created_by: 1,
+  creator: { id: 1, name: 'Daniel', username: 'Daniel', avatar: null },
+  is_creator: true,
+  is_shared_with_me: false,
   closed_at: null,
   created_at: null,
   items: [item],
   items_count: 1,
   unchecked_items_count: 1,
-  recipes_count: 1,
+  recipes_count: 0,
+  recipes: [],
 }
-
-describe('active shopping list state', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    mocks.getActive.mockReset().mockResolvedValue({ data: null })
-    mocks.addRecipe.mockReset().mockResolvedValue({ data: { ...list, already_present: false } })
-    mocks.getConfig.mockReset().mockResolvedValue({ units: { liter: { label: 'l' } } })
-    mocks.setItemChecked.mockReset()
-    mocks.closeActive.mockReset().mockResolvedValue(undefined)
-    mocks.addManualItem.mockReset()
-    mocks.removeRecipe.mockReset()
+const shared: ActiveShoppingList = {
+  ...own,
+  id: 20,
+  name: 'Alina',
+  visibility: 'shared',
+  created_by: 2,
+  creator: { id: 2, name: 'Alina', username: 'Alina', avatar: null },
+  is_creator: false,
+  is_shared_with_me: true,
+  items: [{ ...item, id: 2 }],
+}
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: Error) => void
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done
+    reject = fail
   })
-
-  it('deduplicates simultaneous loads and caches state across normal navigation', async () => {
-    mocks.getActive.mockResolvedValue({ data: list })
+  return { promise, resolve, reject }
+}
+describe('current shopping list state', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    useAuthStore().user = { id: 1, username: 'Daniel', avatar: null, is_admin: false }
+    vi.resetAllMocks()
+    mocks.getOpen.mockResolvedValue({ data: [structuredClone(own)] })
+    mocks.getList.mockImplementation(async (id: number) => ({
+      data: structuredClone(id === 20 ? shared : own),
+    }))
+    mocks.getConfig.mockResolvedValue({ units: { liter: { label: 'l' } } })
+    mocks.createOwn.mockResolvedValue({ data: own })
+    mocks.closeList.mockResolvedValue({ data: { ...own, status: 'closed' } })
+  })
+  it('deduplicates loads, safely defaults to a sole owned list, and caches navigation', async () => {
     const store = useActiveShoppingListStore()
     await Promise.all([store.load(), store.load()])
     await store.load()
-    expect(mocks.getActive).toHaveBeenCalledTimes(1)
+    expect(mocks.getOpen).toHaveBeenCalledTimes(1)
+    expect(mocks.getList).toHaveBeenCalledWith(10)
     expect(mocks.getConfig).toHaveBeenCalledTimes(1)
-    expect(store.summary).toBe('1 produs · 1 rețetă')
+    expect(store.selectedId).toBe(10)
+    expect(store.summary).toBe('1 produs · 0 rețete')
   })
-
-  it('replaces the full removal payload and ignores an outstanding older GET', async () => {
+  it('requires selection for multiple lists and never implicitly chooses even a sole shared list', async () => {
     const store = useActiveShoppingListStore()
-    store.list = { ...structuredClone(list), recipes: [{ id: 12, name: 'Supă' }] }
-    let resolve!: (value: unknown) => void
-    mocks.getActive.mockReturnValueOnce(
-      new Promise((done) => {
-        resolve = done
-      }),
-    )
-    const refresh = store.load(true)
-    const updated = {
-      ...list,
-      items: [{ ...item, quantity: '0.500' }],
-      recipes: [],
-      recipes_count: 0,
+    for (const data of [[shared, own], [shared]]) {
+      mocks.getOpen.mockResolvedValue({ data })
+      await store.load(true)
+      expect(store.list).toBeNull()
+      expect(store.selectionRequired).toBe(true)
+      await expect(store.addRecipe(12)).rejects.toThrow('Alege lista curentă')
     }
+    expect(mocks.addRecipe).not.toHaveBeenCalled()
+    expect(mocks.getList).not.toHaveBeenCalled()
+  })
+  it('runs the Daniel/Alina flow with explicit targets and no mutation reloads', async () => {
+    mocks.getOpen.mockResolvedValue({ data: [shared, own] })
+    const store = useActiveShoppingListStore()
+    await store.load()
+    await store.selectList(20)
+    const manual = { ...item, id: 3, name: 'Dero', ingredient_id: null }
+    mocks.addManualItem.mockResolvedValue({ data: manual })
+    await store.addManualItem({ name: 'Dero', quantity: null, unit: null })
+    mocks.addRecipe.mockResolvedValue({
+      data: {
+        ...shared,
+        items: [...shared.items, manual],
+        items_count: 2,
+        recipes: [{ id: 12, name: 'Supă' }],
+        recipes_count: 1,
+        already_present: false,
+      },
+    })
+    await store.addRecipe(12)
+    mocks.setItemChecked.mockResolvedValue({ data: { ...manual, is_checked: true } })
+    await store.setChecked(3, true)
+    expect(mocks.addManualItem).toHaveBeenCalledWith(20, {
+      name: 'Dero',
+      quantity: null,
+      unit: null,
+    })
+    expect(mocks.addRecipe).toHaveBeenCalledWith(20, 12)
+    expect(mocks.setItemChecked).toHaveBeenCalledWith(20, 3, true)
+    expect(store.list?.recipes).toHaveLength(1)
+    expect(mocks.getOpen).toHaveBeenCalledTimes(1)
+    expect(mocks.getList).toHaveBeenCalledTimes(1)
+    expect(own.items).toEqual([item])
+    await store.selectList(10)
+    await store.addManualItem({ name: 'Bread', quantity: null, unit: null })
+    expect(mocks.addManualItem).toHaveBeenLastCalledWith(10, {
+      name: 'Bread',
+      quantity: null,
+      unit: null,
+    })
+    expect(store.selectedId).toBe(10)
+  })
+  it('restores per-account selection across store recreation and never leaks it to another account', async () => {
+    const store = useActiveShoppingListStore()
+    await store.selectList(20)
+    expect(localStorage.getItem('jucans.current-shopping-list.1')).toBe('20')
+    store.reset()
+    mocks.getOpen.mockResolvedValue({ data: [own, shared] })
+    await store.load()
+    expect(store.list?.id).toBe(20)
+    useAuthStore().user = { id: 2, username: 'Alina', avatar: null, is_admin: false }
+    mocks.getOpen.mockResolvedValue({ data: [] })
+    await store.load()
+    expect(store.selectedId).toBeNull()
+  })
+  it.each(['lost access', 'closed', 'deleted'])(
+    'invalidates persisted selection after %s without falling into a shared list',
+    async () => {
+      localStorage.setItem('jucans.current-shopping-list.1', '99')
+      mocks.getOpen.mockResolvedValue({ data: [shared] })
+      const store = useActiveShoppingListStore()
+      await store.load()
+      expect(store.list).toBeNull()
+      expect(localStorage.getItem('jucans.current-shopping-list.1')).toBeNull()
+      expect(mocks.getList).not.toHaveBeenCalled()
+    },
+  )
+  it('falls back only to an unambiguous owned list after selection is invalidated', async () => {
+    localStorage.setItem('jucans.current-shopping-list.1', '99')
+    const store = useActiveShoppingListStore()
+    await store.load()
+    expect(store.selectedId).toBe(10)
+  })
+  it('rejects closed-list selection without replacing the current list', async () => {
+    const store = useActiveShoppingListStore()
+    await store.load()
+    mocks.getList.mockResolvedValueOnce({ data: { ...shared, status: 'closed' } })
+    await expect(store.selectList(20)).rejects.toThrow('închisă')
+    expect(store.selectedId).toBe(10)
+  })
+  it('creates an owned list explicitly when only shared lists exist', async () => {
+    mocks.getOpen.mockResolvedValue({ data: [shared] })
+    const store = useActiveShoppingListStore()
+    await store.load()
+    await store.createOwn()
+    expect(mocks.createOwn).toHaveBeenCalledTimes(1)
+    expect(store.selectedId).toBe(10)
+  })
+  it('creates an owned list for a recipe only when there are no accessible open lists', async () => {
+    mocks.getOpen.mockResolvedValue({ data: [] })
+    mocks.addRecipe.mockResolvedValue({ data: { ...own, already_present: false } })
+    const store = useActiveShoppingListStore()
+    await store.addRecipe(12)
+    expect(mocks.createOwn).toHaveBeenCalledTimes(1)
+    expect(mocks.addRecipe).toHaveBeenCalledWith(10, 12)
+  })
+  it('checks optimistically, blocks duplicate checks and rolls back network errors', async () => {
+    const store = useActiveShoppingListStore()
+    await store.load()
+    const request = deferred<{ data: typeof item }>()
+    mocks.setItemChecked.mockReturnValueOnce(request.promise)
+    const check = store.setChecked(1, true)
+    expect(store.list?.items[0]?.is_checked).toBe(true)
+    expect(store.remainingSummary).toBe('Totul cumpărat ✓')
+    await store.setChecked(1, false)
+    expect(mocks.setItemChecked).toHaveBeenCalledTimes(1)
+    await expect(store.selectList(20)).rejects.toThrow('ocupată')
+    request.reject(new Error('offline'))
+    await check
+    expect(store.list?.items[0]?.is_checked).toBe(false)
+    expect(store.itemErrors[1]).toContain('Nu am putut salva')
+  })
+  it('preserves pending optimistic checks during refresh and ignores a stale snapshot', async () => {
+    const store = useActiveShoppingListStore()
+    await store.load()
+    const request = deferred<{ data: typeof item }>()
+    mocks.setItemChecked.mockReturnValueOnce(request.promise)
+    const check = store.setChecked(1, true)
+    await store.load(true)
+    expect(store.list?.items[0]?.is_checked).toBe(true)
+    const old = deferred<{ data: ActiveShoppingList }>()
+    mocks.getList.mockReturnValueOnce(old.promise)
+    const refresh = store.load(true)
+    await flushPromises()
+    request.resolve({ data: { ...item, is_checked: true } })
+    await check
+    old.resolve({ data: structuredClone(own) })
+    await refresh
+    expect(store.list?.items[0]?.is_checked).toBe(true)
+  })
+  it('replaces removal contents and ignores an outstanding older GET', async () => {
+    const store = useActiveShoppingListStore()
+    await store.load()
+    const old = deferred<{ data: ActiveShoppingList }>()
+    mocks.getList.mockReturnValueOnce(old.promise)
+    const refresh = store.load(true)
+    await flushPromises()
+    const updated = { ...own, items: [], items_count: 0, recipes: [], recipes_count: 0 }
     mocks.removeRecipe.mockResolvedValue({ data: updated })
     await store.removeRecipe(12)
-    expect(mocks.removeRecipe).toHaveBeenCalledWith(1, 12)
-    expect(store.list).toEqual(updated)
-    expect(store.loaded).toBe(true)
-    resolve({ data: structuredClone(list) })
+    old.resolve({ data: own })
     await refresh
+    expect(mocks.removeRecipe).toHaveBeenCalledWith(10, 12)
     expect(store.list).toEqual(updated)
   })
-
-  it('blocks duplicate and conflicting mutations during removal and preserves state on failure', async () => {
+  it.each(['closing', 'addingItem', 'addingRecipe', 'checking', 'closed'])(
+    'blocks removal while %s',
+    async (mode) => {
+      const store = useActiveShoppingListStore()
+      store.list = { ...structuredClone(own), status: mode === 'closed' ? 'closed' : 'open' }
+      if (mode === 'checking') store.pendingChecks = { 1: true }
+      else if (mode !== 'closed') store[mode as 'closing' | 'addingItem' | 'addingRecipe'] = true
+      await expect(store.removeRecipe(12)).rejects.toThrow()
+      expect(mocks.removeRecipe).not.toHaveBeenCalled()
+    },
+  )
+  it('blocks conflicting mutations during removal and retains state after failure', async () => {
     const store = useActiveShoppingListStore()
-    store.list = structuredClone(list)
-    let reject!: (error: Error) => void
-    mocks.removeRecipe.mockReturnValueOnce(
-      new Promise((_, fail) => {
-        reject = fail
-      }),
-    )
+    await store.load()
+    const request = deferred<{ data: ActiveShoppingList }>()
+    mocks.removeRecipe.mockReturnValueOnce(request.promise)
     const removal = store.removeRecipe(12)
     const failed = expect(removal).rejects.toThrow('offline')
     await expect(store.removeRecipe(12)).rejects.toThrow()
@@ -108,299 +273,73 @@ describe('active shopping list state', () => {
     ).rejects.toThrow()
     await expect(store.addRecipe(13)).rejects.toThrow()
     await store.setChecked(1, true)
-    await store.closeActive()
-    expect(mocks.removeRecipe).toHaveBeenCalledTimes(1)
-    expect(mocks.addRecipe).not.toHaveBeenCalled()
-    expect(mocks.addManualItem).not.toHaveBeenCalled()
+    await store.closeCurrent()
+    request.reject(new Error('offline'))
+    await failed
+    expect(store.list).toEqual(own)
+    expect(mocks.closeList).not.toHaveBeenCalled()
     expect(mocks.setItemChecked).not.toHaveBeenCalled()
-    expect(mocks.closeActive).not.toHaveBeenCalled()
-    reject(new Error('offline'))
-    await failed
-    expect(store.list).toEqual(list)
-    expect(store.removingRecipeId).toBeNull()
   })
-
-  it.each(['closing', 'addingItem', 'addingRecipe', 'checking', 'closed'])(
-    'blocks removal while %s',
-    async (mode) => {
-      const store = useActiveShoppingListStore()
-      store.list = { ...structuredClone(list), status: mode === 'closed' ? 'closed' : 'open' }
-      if (mode === 'checking') store.pendingChecks = { 1: true }
-      else if (mode !== 'closed') store[mode as 'closing' | 'addingItem' | 'addingRecipe'] = true
-      await expect(store.removeRecipe(12)).rejects.toThrow()
-      expect(mocks.removeRecipe).not.toHaveBeenCalled()
-    },
-  )
-
-  it('ignores a removal response after session reset', async () => {
+  it('adds manual items without reload and rejects stale detail responses', async () => {
     const store = useActiveShoppingListStore()
-    store.list = structuredClone(list)
-    let resolve!: (value: unknown) => void
-    mocks.removeRecipe.mockReturnValueOnce(
-      new Promise((done) => {
-        resolve = done
-      }),
-    )
-    const removal = store.removeRecipe(12)
-    const failed = expect(removal).rejects.toThrow('Shopping list changed')
-    store.reset()
-    resolve({ data: { ...list, recipes: [], recipes_count: 0 } })
-    await failed
-    expect(store.list).toBeNull()
-    expect(store.removingRecipeId).toBeNull()
-  })
-
-  it('retains known attachments on navigation when legacy GET responses omit recipes', async () => {
-    const store = useActiveShoppingListStore()
-    store.list = { ...structuredClone(list), recipes: [{ id: 12, name: 'Supă' }] }
-    mocks.getActive.mockResolvedValue({ data: structuredClone(list) })
-    await store.load(true)
-    expect(store.list?.recipes).toEqual([{ id: 12, name: 'Supă' }])
-    mocks.getActive.mockResolvedValue({ data: { ...list, recipes_count: 2 } })
-    await store.load(true)
-    expect(store.list?.recipes).toBeUndefined()
-  })
-
-  it('keeps recipe summaries learned from addition in the same active list state', async () => {
-    const store = useActiveShoppingListStore()
-    mocks.getActive.mockResolvedValue({ data: structuredClone(list) })
-    mocks.addRecipe.mockResolvedValue({
-      data: { ...list, recipe: { id: 12, name: 'Supă' }, already_present: false },
-    })
-    await store.addRecipe(12)
-    expect(store.list?.recipes).toEqual([{ id: 12, name: 'Supă' }])
-    await store.load(true)
-    expect(store.list?.recipes).toEqual([{ id: 12, name: 'Supă' }])
-  })
-
-  it('inserts a manual item and updates counts while rejecting a stale GET', async () => {
-    const store = useActiveShoppingListStore()
-    mocks.getActive.mockResolvedValue({ data: structuredClone(list) })
     await store.load()
-    let resolve!: (value: unknown) => void
-    mocks.getActive.mockReturnValueOnce(
-      new Promise((done) => {
-        resolve = done
-      }),
-    )
+    const old = deferred<{ data: ActiveShoppingList }>()
+    mocks.getList.mockReturnValueOnce(old.promise)
     const refresh = store.load(true)
-    const manual = {
-      ...item,
-      id: 2,
-      name: 'Dero',
-      ingredient_id: null,
-      calculated_quantity: null,
-      unit: 'buc',
-      quantity_overridden: true,
-    }
-    mocks.addManualItem.mockResolvedValue({ data: manual })
-    await store.addManualItem({ name: 'Dero', quantity: 1, unit: 'buc' })
-    expect(store.list?.items).toHaveLength(2)
-    expect(store.list?.items_count).toBe(2)
-    expect(store.remainingSummary).toBe('2 de cumpărat · 1 rețetă')
-    resolve({ data: structuredClone(list) })
+    await flushPromises()
+    mocks.addManualItem.mockResolvedValue({ data: { ...item, id: 3, name: 'Dero' } })
+    await store.addManualItem({ name: 'Dero', quantity: null, unit: null })
+    old.resolve({ data: own })
     await refresh
-    expect(store.list?.items[1]).toEqual(manual)
-    expect(mocks.getActive).toHaveBeenCalledTimes(2)
+    expect(store.list?.items_count).toBe(2)
+    expect(store.remainingSummary).toBe('2 de cumpărat · 0 rețete')
   })
-
-  it('blocks simultaneous additions and closing, and preserves state after failure', async () => {
+  it('ignores late mutations and reads after logout', async () => {
     const store = useActiveShoppingListStore()
-    mocks.getActive.mockResolvedValue({ data: structuredClone(list) })
     await store.load()
-    let reject!: (error: Error) => void
-    mocks.addManualItem.mockReturnValueOnce(
-      new Promise((_, fail) => {
-        reject = fail
-      }),
-    )
-    const input = { name: 'Dero', quantity: null, unit: null }
-    const addition = store.addManualItem(input)
-    const failed = expect(addition).rejects.toThrow('offline')
-    await expect(store.addManualItem(input)).rejects.toThrow()
-    await store.closeActive()
-    expect(mocks.closeActive).not.toHaveBeenCalled()
-    expect(mocks.addManualItem).toHaveBeenCalledTimes(1)
-    reject(new Error('offline'))
-    await failed
-    expect(store.list?.items_count).toBe(1)
-    expect(store.addingItem).toBe(false)
-  })
-
-  it('ignores a manual addition response after logout', async () => {
-    const auth = useAuthStore()
-    auth.user = { id: 1, username: 'daniel', avatar: null, is_admin: false }
-    const store = useActiveShoppingListStore()
-    mocks.getActive.mockResolvedValue({ data: structuredClone(list) })
-    await store.load()
-    let resolve!: (value: unknown) => void
-    mocks.addManualItem.mockReturnValueOnce(
-      new Promise((done) => {
-        resolve = done
-      }),
-    )
+    const request = deferred<{ data: typeof item }>()
+    mocks.addManualItem.mockReturnValueOnce(request.promise)
     const addition = store.addManualItem({ name: 'Dero', quantity: null, unit: null })
     const failed = expect(addition).rejects.toThrow('Shopping list changed')
-    auth.user = null
-    resolve({ data: { ...item, id: 2 } })
+    useAuthStore().user = null
+    request.resolve({ data: item })
     await failed
     expect(store.list).toBeNull()
     expect(store.addingItem).toBe(false)
-  })
-
-  it('does not resurrect the active list from an outstanding GET after closing', async () => {
-    const store = useActiveShoppingListStore()
-    let resolve!: (value: unknown) => void
-    mocks.getActive.mockReturnValueOnce(
-      new Promise((done) => {
-        resolve = done
-      }),
-    )
-    const request = store.load()
-    await store.closeActive()
-    resolve({ data: structuredClone(list) })
-    await request
-    expect(store.list).toBeNull()
-    expect(store.hasItems).toBe(false)
-    expect(store.loaded).toBe(true)
-  })
-
-  it('appears after adding a recipe and reloads the complete list rather than only affected items', async () => {
-    const store = useActiveShoppingListStore()
-    await store.load()
-    const complete = {
-      ...list,
-      items: [item, { ...item, id: 2, name: 'Cimbru', quantity: null }],
-      items_count: 2,
-      recipes_count: 3,
-    }
-    mocks.getActive.mockResolvedValue({ data: complete })
-    mocks.addRecipe.mockResolvedValue({
-      data: { ...complete, items: [item], already_present: false },
-    })
-    await store.addRecipe(12)
-    expect(mocks.addRecipe).toHaveBeenCalledWith(12)
-    expect(store.list?.items).toHaveLength(2)
-    expect(store.hasItems).toBe(true)
-    expect(store.summary).toBe('2 produse · 3 rețete')
-  })
-
-  it('keeps unaffected items while updating an existing contribution', async () => {
-    const complete = {
-      ...list,
-      items: [item, { ...item, id: 2, name: 'Cimbru', quantity: null }],
-      items_count: 2,
-    }
-    mocks.getActive.mockResolvedValue({ data: complete })
-    const store = useActiveShoppingListStore()
-    await store.load()
-    mocks.addRecipe.mockResolvedValue({
-      data: { ...complete, items: [{ ...item, quantity: '2.000' }], recipes_count: 2 },
-    })
-    mocks.getActive.mockRejectedValueOnce(new Error('refresh offline'))
-    await store.addRecipe(12)
-    expect(store.list?.items).toHaveLength(2)
-    expect(store.list?.items[0]?.quantity).toBe('2.000')
-    expect(store.list?.recipes_count).toBe(2)
-  })
-
-  it('does not let an older request overwrite a successful addition', async () => {
-    let resolve!: (value: unknown) => void
-    mocks.getActive
-      .mockReturnValueOnce(
-        new Promise((done) => {
-          resolve = done
-        }),
-      )
-      .mockResolvedValue({ data: list })
-    const store = useActiveShoppingListStore()
-    const old = store.load()
-    await store.addRecipe(12)
-    resolve({ data: null })
-    await old
-    expect(store.hasItems).toBe(true)
-  })
-
-  it('clears data on logout and ignores outstanding requests from the previous user', async () => {
-    const auth = useAuthStore()
-    auth.user = { id: 1, username: 'daniel', avatar: null, is_admin: false }
-    const store = useActiveShoppingListStore()
-    let resolve!: (value: unknown) => void
-    mocks.getActive.mockReturnValueOnce(
-      new Promise((done) => {
-        resolve = done
-      }),
-    )
-    const old = store.load()
-    auth.user = null
-    resolve({ data: list })
-    await old
-    await flushPromises()
-    expect(store.list).toBeNull()
-    expect(store.loaded).toBe(false)
-  })
-
-  it('checks optimistically, prevents duplicate toggles, and unchecks with remaining counts', async () => {
-    mocks.getActive.mockResolvedValue({ data: structuredClone(list) })
-    const store = useActiveShoppingListStore()
-    await store.load()
-    let resolve!: (value: unknown) => void
-    mocks.setItemChecked.mockReturnValueOnce(
-      new Promise((done) => {
-        resolve = done
-      }),
-    )
-    const request = store.setChecked(1, true)
-    expect(store.list?.items[0]?.is_checked).toBe(true)
-    expect(store.list?.unchecked_items_count).toBe(0)
-    expect(store.remainingSummary).toBe('Totul cumpărat ✓')
-    await store.setChecked(1, false)
-    expect(mocks.setItemChecked).toHaveBeenCalledTimes(1)
-    resolve({ data: { ...item, is_checked: true } })
-    await request
-    mocks.setItemChecked.mockResolvedValueOnce({ data: item })
-    await store.setChecked(1, false)
-    expect(store.list?.unchecked_items_count).toBe(1)
-    expect(store.list?.items[0]?.quantity).toBe('1.000')
-    expect(store.remainingSummary).toBe('1 de cumpărat · 1 rețetă')
-  })
-
-  it('rolls back a failed toggle and exposes retry feedback', async () => {
-    mocks.getActive.mockResolvedValue({ data: structuredClone(list) })
-    const store = useActiveShoppingListStore()
-    await store.load()
-    mocks.setItemChecked.mockRejectedValueOnce(new Error('offline'))
-    await store.setChecked(1, true)
-    expect(store.list?.items[0]?.is_checked).toBe(false)
-    expect(store.list?.unchecked_items_count).toBe(1)
-    expect(store.itemErrors[1]).toContain('Nu am putut salva')
-    expect(store.pendingChecks[1]).toBeUndefined()
-  })
-
-  it('preserves an optimistic check during a refresh and rejects late stale snapshots', async () => {
-    mocks.getActive.mockResolvedValue({ data: structuredClone(list) })
-    const store = useActiveShoppingListStore()
-    await store.load()
-    let resolve!: (value: unknown) => void
-    mocks.setItemChecked.mockReturnValueOnce(
-      new Promise((done) => {
-        resolve = done
-      }),
-    )
-    const check = store.setChecked(1, true)
-    await store.load(true)
-    expect(store.list?.items[0]?.is_checked).toBe(true)
-    let resolveLoad!: (value: unknown) => void
-    mocks.getActive.mockReturnValueOnce(
-      new Promise((done) => {
-        resolveLoad = done
-      }),
-    )
-    const refresh = store.load(true)
-    resolve({ data: { ...item, is_checked: true } })
-    await check
-    resolveLoad({ data: structuredClone(list) })
+    const old = deferred<{ data: ActiveShoppingList[] }>()
+    mocks.getOpen.mockReturnValueOnce(old.promise)
+    const refresh = store.load()
+    store.reset()
+    old.resolve({ data: [own] })
     await refresh
-    expect(store.list?.items[0]?.is_checked).toBe(true)
+    expect(store.list).toBeNull()
+  })
+  it('closes only the explicit owned current list and cannot resurrect it from a stale GET', async () => {
+    const store = useActiveShoppingListStore()
+    await store.load()
+    const old = deferred<{ data: ActiveShoppingList }>()
+    mocks.getList.mockReturnValueOnce(old.promise)
+    const refresh = store.load(true)
+    await flushPromises()
+    await store.closeCurrent()
+    old.resolve({ data: own })
+    await refresh
+    expect(mocks.closeList).toHaveBeenCalledWith(10)
+    expect(store.list).toBeNull()
+    expect(localStorage.getItem('jucans.current-shopping-list.1')).toBeNull()
+    await store.selectList(20)
+    await store.closeCurrent()
+    expect(mocks.closeList).toHaveBeenCalledTimes(1)
+  })
+  it('invalidates a current list when an explicit write loses access without retrying the write elsewhere', async () => {
+    const store = useActiveShoppingListStore()
+    await store.selectList(20)
+    mocks.getOpen.mockResolvedValue({ data: [own] })
+    mocks.addManualItem.mockRejectedValueOnce(new ApiError('Forbidden', 403))
+    await expect(
+      store.addManualItem({ name: 'Dero', quantity: null, unit: null }),
+    ).rejects.toThrow()
+    expect(store.selectedId).toBe(10)
+    expect(mocks.addManualItem).toHaveBeenCalledTimes(1)
   })
 })

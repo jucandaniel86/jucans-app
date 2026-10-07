@@ -14,6 +14,8 @@ import {
 } from '@/composables/recipeDraft'
 import { ApiError } from '@/services/api'
 import { foodApi } from '@/services/foodApi'
+import { useNotificationStore } from '@/stores/notifications'
+import { actionErrorMessage } from '@/utils/actionError'
 import type {
   CreatedRecipe,
   ExistingIngredient,
@@ -334,11 +336,15 @@ export function useRecipeDraft() {
           saveError.value = 'Verifică ingredientele marcate cu roșu.'
           return false
         }
+        saveError.value = friendlyRequestError(error, 'Verifică informațiile introduse și încearcă din nou.')
+        return false
       }
 
-      saveError.value = friendlyRequestError(
-        error,
-        'Nu am putut salva rețeta. Toate informațiile tale sunt încă aici.',
+      useNotificationStore().error(
+        actionErrorMessage(
+          error,
+          'Nu am putut salva rețeta. Toate informațiile tale sunt încă aici.',
+        ),
       )
       return false
     } finally {

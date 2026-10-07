@@ -44,13 +44,16 @@ class ShoppingListHistoryApiTest extends TestCase
             $list = $this->list($owner, ['status' => $status, 'visibility' => 'shared', 'closed_at' => $status === 'closed' ? now() : null]);
             $list->users()->attach($user->id);
             $recipe = $owner->recipes()->create(['name' => 'Recipe']);
+            $list->recipes()->attach($recipe->id, ['added_by' => $owner->id]);
             $item = $list->items()->create(['name' => 'Milk', 'quantity' => 2, 'is_checked' => true]);
             $source = $item->sources()->create(['recipe_id' => $recipe->id, 'quantity' => 2, 'unit' => 'liter']);
             $this->getJson('/api/shopping-lists/'.$list->id)->assertOk()
                 ->assertJsonPath('data.status', $status)->assertJsonPath('data.items.0.id', $item->id)
                 ->assertJsonPath('data.items.0.quantity', '2.000')->assertJsonPath('data.items.0.is_checked', true)
                 ->assertJsonPath('data.items.0.shopping_category', null)
-                ->assertJsonPath('data.items.0.sources.0.id', $source->id);
+                ->assertJsonPath('data.items.0.sources.0.id', $source->id)
+                ->assertJsonPath('data.recipes.0.id', $recipe->id)
+                ->assertJsonPath('data.recipes.0.name', 'Recipe');
         }
     }
 
