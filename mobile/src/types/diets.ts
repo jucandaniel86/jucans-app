@@ -12,6 +12,14 @@ export enum DietSourceType {
   OTHER = 'other',
 }
 
+export enum DietIngredientStatus {
+  REQUIRED = 'required',
+  PREFERRED = 'preferred',
+  ALLOWED = 'allowed',
+  CONDITIONAL = 'conditional',
+  EXCLUDED = 'excluded',
+}
+
 export interface ResourceItem<T> {
   data: T
 }
@@ -40,6 +48,14 @@ export interface DietDailyStructure {
   structure: DailyStructureConfig
 }
 
+export interface DietIngredient {
+  default_unit: string
+  id: number
+  name: string
+  notes: string | null
+  status: DietIngredientStatus
+}
+
 export interface Diet {
   id: number
   name: string
@@ -51,6 +67,7 @@ export interface Diet {
   updated_at: string | null
   sources: DietSource[]
   daily_structure: DietDailyStructure[]
+  ingredients: DietIngredient[]
 }
 
 export type DietDetailResponse = ResourceItem<Diet>
@@ -58,3 +75,4 @@ export type CreatedDietResponse = ResourceItem<Diet>
 export type DailyStructureResponse = ResourceItem<DailyStructureConfig[]>
 export type DietDailyStructureResponse = ResourceItem<DietDailyStructure[]>
 export type DietSourcesResponse = ResourceItem<DietSource[]>
+export type DietIngredientsResponse = ResourceItem<DietIngredient[]>

@@ -13,6 +13,7 @@ import AppTabs from '@/components/app/AppTabs.vue'
 import DietDailyStructure from './partials/DietDailyStructure.view.vue'
 import type { DailyStructureConfig } from '@/types/diets.ts'
 import DietSources from './partials/DietSources.view.vue'
+import DietIngredients from './partials/DietIngredients.vue'
 
 //models
 const loading = ref(false)
@@ -133,6 +134,13 @@ watch(
             :items="draftDiet.diet.sources"
             :diet-id="draftDiet.diet.id"
             @reload-list="draftDiet.diet.sources = $event"
+          />
+
+          <DietIngredients
+            v-else-if="activeTab === 'ingredients'"
+            :diet-id="draftDiet.diet.id"
+            :ingredients="draftDiet.diet.ingredients"
+            @reload-list="draftDiet.diet.ingredients = $event"
           />
         </div>
       </div>

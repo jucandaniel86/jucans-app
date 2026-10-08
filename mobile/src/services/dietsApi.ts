@@ -6,6 +6,8 @@ import type {
   DietDailyStructureResponse,
   DietSource,
   DietSourcesResponse,
+  DietIngredientsResponse,
+  DietIngredient,
 } from '@/types/diets'
 
 export const dietsApi = {
@@ -59,5 +61,19 @@ export const dietsApi = {
 
   deleteSource(dietId: number, sourceId: number): Promise<DietSourcesResponse> {
     return api.delete<DietSourcesResponse>(`/diets/${dietId}/sources/${sourceId}`)
+  },
+
+  addIngredient(dietId: number, ingredientId: number): Promise<DietIngredientsResponse> {
+    return api.post<DietIngredientsResponse>(`/diets/${dietId}/ingredients`, {
+      ingredient_id: ingredientId,
+    })
+  },
+
+  deleteIngredient(dietId: number, ingredientId: number): Promise<DietIngredientsResponse> {
+    return api.delete<DietIngredientsResponse>(`/diets/${dietId}/ingredients/${ingredientId}`)
+  },
+
+  saveIngredient(dietId: number, payload: DietIngredient): Promise<DietIngredientsResponse> {
+    return api.patch<DietIngredientsResponse>(`/diets/${dietId}/ingredients/${payload.id}`, payload)
   },
 }

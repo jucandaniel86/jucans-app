@@ -1,4 +1,4 @@
-import { DietStatus, type Diet, type DietSource } from '@/types/diets'
+import { DietStatus, type Diet } from '@/types/diets'
 import { reactive } from 'vue'
 
 export function useDiet() {
@@ -13,6 +13,7 @@ export function useDiet() {
     updated_at: null,
     sources: [],
     daily_structure: [],
+    ingredients: [],
   })
 
   const activeTabs = [
@@ -34,6 +35,7 @@ export function useDiet() {
       updated_at: existingDiet.updated_at,
       sources: existingDiet.sources,
       daily_structure: existingDiet.daily_structure,
+      ingredients: existingDiet.ingredients,
     })
   }
 

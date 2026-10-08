@@ -2,13 +2,17 @@
 
   namespace App\Http\Controllers\Api;
 
+  use App\Enums\DietIngredientStatus;
   use App\Http\Controllers\Controller;
   use App\Http\Requests\Diet\AddDailyStructureRequest;
+  use App\Http\Requests\Diet\AddDietIngredientRequest;
   use App\Http\Requests\Diet\ChangeDailyStructureOrderRequest;
   use App\Http\Requests\Diet\DietDraftRequest;
   use App\Http\Requests\Diet\SaveSourceRequest;
+  use App\Http\Requests\Diet\UpdateDietIngredientRequest;
   use App\Http\Resources\DailyStructureResource;
   use App\Http\Resources\DietDailyStructureResource;
+  use App\Http\Resources\DietIngredientResource;
   use App\Http\Resources\DietResource;
   use App\Http\Resources\DietSourceResource;
   use App\Models\DailyStructure;
@@ -16,6 +20,7 @@
   use App\Services\DietService;
   use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
   use Illuminate\Support\Facades\DB;
+  use Illuminate\Validation\ValidationException;
 
   class DietController extends Controller
   {
@@ -67,8 +72,9 @@
     {
       return $diet->load([
         'creator',
+        'ingredients',
         'sources' => fn($q) => $q->orderBy('id', 'desc'),
-        'dailyStructure' => fn($q) => $q->with('structure')
+        'dailyStructure' => fn($q) => $q->with('structure'),
       ]);
     }
 
@@ -220,5 +226,84 @@
       $source->delete();
 
       return DietSourceResource::collection($diet->sources()->orderBy('id', 'desc')->get());
+    }
+
+    /**
+     * @param Diet $diet
+     * @return AnonymousResourceCollection
+     */
+    private function dietIngredientsResponse(
+      Diet $diet
+    ): AnonymousResourceCollection
+    {
+      return DietIngredientResource::collection(
+        $diet->ingredients()
+          ->orderBy('ingredients.name')
+          ->get()
+      );
+    }
+
+    /**
+     * @url POST /diets/{diet}/ingredients
+     */
+    public function addDietIngredient(
+      AddDietIngredientRequest $request,
+      Diet                     $diet
+    ): AnonymousResourceCollection
+    {
+      $validated = $request->validated();
+
+      $ingredientId = $validated['ingredient_id'];
+
+      if ($diet->ingredients()->whereKey($ingredientId)->exists()) {
+        throw ValidationException::withMessages([
+          'ingredient_id' => 'Ingredientul este deja asociat dietei.',
+        ]);
+      }
+
+      $diet->ingredients()->attach($ingredientId, [
+        'status' => $validated['status'] ?? DietIngredientStatus::ALLOWED->value,
+        'notes' => $validated['notes'] ?? null,
+      ]);
+
+      return $this->dietIngredientsResponse($diet);
+    }
+
+    /**
+     * @url PATCH /diets/{diet}/ingredients/{ingredientId}
+     */
+    public function updateDietIngredient(
+      UpdateDietIngredientRequest $request,
+      Diet                        $diet,
+      int                         $ingredientId
+    ): AnonymousResourceCollection
+    {
+      $diet->ingredients()
+        ->whereKey($ingredientId)
+        ->firstOrFail();
+
+      $diet->ingredients()->updateExistingPivot(
+        $ingredientId,
+        $request->validated()
+      );
+
+      return $this->dietIngredientsResponse($diet);
+    }
+
+    /**
+     * @url DELETE /diets/{diet}/ingredients/{ingredientId}
+     */
+    public function deleteDietIngredient(
+      Diet $diet,
+      int  $ingredientId
+    ): AnonymousResourceCollection
+    {
+      $diet->ingredients()
+        ->whereKey($ingredientId)
+        ->firstOrFail();
+
+      $diet->ingredients()->detach($ingredientId);
+
+      return $this->dietIngredientsResponse($diet);
     }
   }

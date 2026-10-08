@@ -55,21 +55,25 @@
 
     Route::prefix('diets')->group(function () {
       Route::post('/', [DietController::class, 'store']);
-      Route::get('/daily-structures', [DietController::class, 'dailyStructures']);
 
+      #daily structure
+      Route::get('/daily-structures', [DietController::class, 'dailyStructures']);
       Route::post('/{diet}/daily-structure', [DietController::class, 'addDailyStructure']);
-      Route::patch(
-        '/{diet}/daily-structure/{item}/order',
-        [DietController::class, 'changeDailyStructureOrder']
-      );
-      Route::delete(
-        '/{diet}/daily-structure/{item}',
-        [DietController::class, 'deleteDailyStructure']
-      );
+      Route::patch('/{diet}/daily-structure/{item}/order', [DietController::class, 'changeDailyStructureOrder']);
+      Route::delete('/{diet}/daily-structure/{item}', [DietController::class, 'deleteDailyStructure']);
+
+      #show
       Route::get('/{diet}', [DietController::class, 'show']);
+
+      #sources
       Route::post('/{diet}/sources', [DietController::class, 'addDietSource']);
       Route::patch('/{diet}/sources/{sourceId}', [DietController::class, 'updateDietSource']);
       Route::delete('/{diet}/sources/{sourceId}', [DietController::class, 'deleteDietSource']);
+
+      #ingredients
+      Route::post('/{diet}/ingredients', [DietController::class, 'addDietIngredient',]);
+      Route::patch('/{diet}/ingredients/{ingredientId}', [DietController::class, 'updateDietIngredient',]);
+      Route::delete('/{diet}/ingredients/{ingredientId}', [DietController::class, 'deleteDietIngredient',]);
     });
 
     Route::prefix('admin')->middleware('admin')->group(function () {

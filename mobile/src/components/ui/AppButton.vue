@@ -81,6 +81,13 @@ withDefaults(
   visibility: hidden;
 }
 
+.app-button__label {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .app-button__spinner {
   position: absolute;
   width: 22px;
