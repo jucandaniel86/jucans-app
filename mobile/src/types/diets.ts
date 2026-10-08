@@ -27,6 +27,19 @@ export interface DietSource {
   updated_at: string | null
 }
 
+export interface DailyStructureConfig {
+  id: number
+  name: string
+  slug: string
+}
+
+export interface DietDailyStructure {
+  diet_id: number
+  id: number
+  position: number
+  structure: DailyStructureConfig
+}
+
 export interface Diet {
   id: number
   name: string
@@ -37,14 +50,10 @@ export interface Diet {
   created_at: string | null
   updated_at: string | null
   sources: DietSource[]
-}
-
-export interface DailyStructure {
-  id: number
-  name: string
-  slug: string
+  daily_structure: DietDailyStructure[]
 }
 
 export type DietDetailResponse = ResourceItem<Diet>
 export type CreatedDietResponse = ResourceItem<Diet>
-export type DailyStructureResponse = ResourceItem<DailyStructure[]>
+export type DailyStructureResponse = ResourceItem<DailyStructureConfig[]>
+export type DietDailyStructureResponse = ResourceItem<DietDailyStructure[]>

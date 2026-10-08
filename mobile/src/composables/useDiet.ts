@@ -12,6 +12,7 @@ export function useDiet() {
     created_at: null,
     updated_at: null,
     sources: [],
+    daily_structure: [],
   })
 
   const activeTabs = [
@@ -32,6 +33,7 @@ export function useDiet() {
       created_at: existingDiet.created_at,
       updated_at: existingDiet.updated_at,
       sources: existingDiet.sources,
+      daily_structure: existingDiet.daily_structure,
     })
   }
 

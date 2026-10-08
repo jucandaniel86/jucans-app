@@ -8,4 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 class DailyStructure extends Model
 {
     use HasFactory;
+
+
 }

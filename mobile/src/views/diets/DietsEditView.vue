@@ -11,7 +11,7 @@ import AppInput from '@/components/ui/AppInput.vue'
 import AppTextarea from '@/components/ui/AppTextarea.vue'
 import AppTabs from '@/components/app/AppTabs.vue'
 import DietDailyStructure from './partials/DietDailyStructure.vue'
-import type { DailyStructure } from '@/types/diets.ts'
+import type { DailyStructureConfig } from '@/types/diets.ts'
 
 //models
 const loading = ref(false)
@@ -22,7 +22,7 @@ const route = useRoute()
 const router = useRouter()
 const draftDiet = useDiet()
 const activeTab = ref<string>(draftDiet.defaultTab)
-const dailyStructure = ref<DailyStructure[]>([])
+const dailyStructure = ref<DailyStructureConfig[]>([])
 
 // const { warning } = useNotificationStore()
 
@@ -43,11 +43,7 @@ const loadDiet = async () => {
   }
 }
 
-const loadDailyStructure = async () => {
-  const response = await dietsApi.getDailyStructure()
-  console.log('Daily Structure Response:', response.data)
-  return response
-}
+const loadDailyStructure = async () => await dietsApi.getDailyStructureConfig()
 
 const saveDiet = async () => {}
 
@@ -126,7 +122,9 @@ watch(
         <div class="app__tabs-content">
           <DietDailyStructure
             v-if="activeTab === 'daily-structure'"
-            :daily-structure="dailyStructure"
+            :daily-structure-config="dailyStructure"
+            :daily-structure="draftDiet.diet.daily_structure"
+            :diet-id="draftDiet.diet.id"
           />
         </div>
       </div>

@@ -8,7 +8,7 @@ export interface SelectOption {
 
 withDefaults(
   defineProps<{
-    modelValue: string
+    modelValue: string | number | null
     label: string
     options: SelectOption[]
     error?: string
