@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, disposePinia, setActivePinia } from 'pinia'
+import { ApiError } from '@/services/api'
 import { useNotificationStore } from './notifications'
 
 describe('notifications', () => {
@@ -16,7 +17,12 @@ describe('notifications', () => {
 
   it('expires each type at its default duration with independent unique IDs', () => {
     const store = useNotificationStore()
-    const ids = [store.success('Salvat'), store.info('Informație'), store.warning('Atenție'), store.error('Eroare')]
+    const ids = [
+      store.success('Salvat'),
+      store.info('Informație'),
+      store.warning('Atenție'),
+      store.error('Eroare'),
+    ]
     expect(new Set(ids).size).toBe(4)
     vi.advanceTimersByTime(2999)
     expect(store.notifications).toHaveLength(4)
@@ -54,5 +60,37 @@ describe('notifications', () => {
     expect(vi.getTimerCount()).toBe(1)
     disposePinia(pinia)
     expect(vi.getTimerCount()).toBe(0)
+  })
+  it('combines API validation messages without repeating the main message', () => {
+    const store = useNotificationStore()
+    store.apiError(
+      new ApiError('Invalid', 422, {
+        name: ['Invalid', 'Numele este obligatoriu.'],
+        email: ['Email invalid.'],
+      }),
+    )
+    expect(store.notifications[0]?.message).toBe(
+      'Invalid\nNumele este obligatoriu.\nEmail invalid.',
+    )
+    store.apiError(new Error('Internal'))
+    expect(store.notifications[1]?.message).toBe('A apărut o eroare. Încearcă din nou.')
+    store.apiError(null, 'Personalizat')
+    expect(store.notifications[2]?.message).toBe('Personalizat')
+    store.apiError(undefined, '')
+    expect(store.notifications[3]?.message).toBe('')
+  })
+
+  it('resolves queued confirmations independently and cancels pending ones on disposal', async () => {
+    const store = useNotificationStore()
+    const first = store.confirm({ title: 'Prima', message: 'Continui?' })
+    const second = store.confirm({ title: 'A doua', message: 'Continui?' })
+    store.resolveConfirmation(true)
+    await expect(first).resolves.toBe(true)
+    expect(store.confirmations[0]?.title).toBe('A doua')
+    store.resolveConfirmation(false)
+    await expect(second).resolves.toBe(false)
+    const pending = store.confirm({ title: 'Final', message: 'Continui?' })
+    disposePinia(pinia)
+    await expect(pending).resolves.toBe(false)
   })
 })

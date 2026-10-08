@@ -27,7 +27,6 @@ const emit = defineEmits<{
 const showModal = ref(false)
 const editingItem = ref<DietSource | null>(null)
 const saving = ref(false)
-const deletingId = ref<number | null>(null)
 const sourceOptions = Object.entries(dietSourceTypes).map(([value, config]) => ({
   value,
   label: `${config.icon} ${config.label}`,
@@ -42,32 +41,9 @@ const sourceItemForm = reactive<DietSource>({
 })
 
 //composables
-const { error } = useNotificationStore()
+const notifications = useNotificationStore()
 
 //methods
-const addSource = async () => {
-  const source = await dietsApi.addSource(props.dietId, sourceItemForm)
-  emit('reloadList', source.data)
-}
-
-const editSource = async () => {
-  //   const source = await dietsApi.updateSource(props.dietId, editingId, payload)
-  // emit(
-  //   'reloadList',
-  //   props.sources.map(item =>
-  //     item.id === source.data.id ? source.data : item
-  //   )
-  // )
-}
-
-const deleteSource = async () => {
-  //   await dietsApi.deleteSource(props.dietId, sourceId)
-  // emit(
-  //   'reloadList',
-  //   props.sources.filter(item => item.id !== sourceId)
-  // )
-}
-
 const handleEdit = (item: DietSource) => {
   editingItem.value = item
   showModal.value = true
@@ -78,17 +54,47 @@ const handleAdd = () => {
   showModal.value = true
 }
 
+const handleDelete = async (sourceId: number) => {
+  const confirmed = await notifications.confirm({
+    title: 'Șterge sursa',
+    message: 'Sigur vrei să ștergi această sursă?',
+    confirmText: 'Șterge',
+    cancelText: 'Anulează',
+  })
+
+  if (!confirmed) return
+
+  try {
+    const response = await dietsApi.deleteSource(props.dietId, sourceId)
+
+    emit('reloadList', response.data)
+
+    notifications.success('Sursa a fost ștearsă.')
+  } catch (err) {
+    notifications.apiError(err, 'Nu am putut șterge sursa.')
+  }
+}
+
 const handleSave = async () => {
   saving.value = true
+  const isEditing = editingItem.value !== null
+
   try {
-    const currentAction = editingItem.value ? editSource : addSource
-    await currentAction()
+    const response =
+      isEditing && editingItem.value
+        ? await dietsApi.updateSource(props.dietId, editingItem.value.id, sourceItemForm)
+        : await dietsApi.addSource(props.dietId, sourceItemForm)
+
+    emit('reloadList', response.data)
     showModal.value = false
+    notifications.success(isEditing ? 'Sursa a fost actualizată.' : 'Sursa a fost adăugată.')
   } catch (err) {
     console.warn('error', err)
-    error('Something went wrong' + JSON.stringify(err))
+    notifications.apiError(err, 'Nu am putut salva sursa.')
+  } finally {
+    saving.value = false
+    editingItem.value = null
   }
-  saving.value = false
 }
 
 watch(editingItem, (currentItem) => {
@@ -127,7 +133,13 @@ watch(editingItem, (currentItem) => {
   </AppModal>
   <div class="diet-sources-wrapper">
     <div class="diet-sources-list__wrapper">
-      <SourceCard v-for="item in props.items" :key="item.id" :item="item" @edit="handleEdit" />
+      <SourceCard
+        v-for="item in props.items"
+        :key="item.id"
+        :item="item"
+        @edit="handleEdit"
+        @delete="handleDelete"
+      />
     </div>
     <div class="diet-sources__actions">
       <AppButton

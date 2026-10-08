@@ -48,4 +48,16 @@ export const dietsApi = {
   addSource(dietId: number, payload: DietSource): Promise<DietSourcesResponse> {
     return api.post<DietSourcesResponse>(`/diets/${dietId}/sources`, payload)
   },
+
+  updateSource(
+    dietId: number,
+    sourceId: number,
+    payload: DietSource,
+  ): Promise<DietSourcesResponse> {
+    return api.patch<DietSourcesResponse>(`/diets/${dietId}/sources/${sourceId}`, payload)
+  },
+
+  deleteSource(dietId: number, sourceId: number): Promise<DietSourcesResponse> {
+    return api.delete<DietSourcesResponse>(`/diets/${dietId}/sources/${sourceId}`)
+  },
 }

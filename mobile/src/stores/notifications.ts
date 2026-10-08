@@ -1,5 +1,13 @@
 import { onScopeDispose, ref } from 'vue'
 import { defineStore } from 'pinia'
+import { ApiError } from '@/services/api'
+
+export interface ConfirmOptions {
+  title: string
+  message: string
+  confirmText?: string
+  cancelText?: string
+}
 
 export type NotificationType = 'success' | 'error' | 'warning' | 'info'
 export interface Notification {
@@ -21,6 +29,33 @@ export const useNotificationStore = defineStore('notifications', () => {
   const timers = new Map<number, ReturnType<typeof setTimeout>>()
   const recent = new Map<string, { id: number; time: number }>()
   let nextId = 0
+  const confirmations = ref<ConfirmOptions[]>([])
+  const confirmationResolvers: Array<(confirmed: boolean) => void> = []
+
+  function confirm(options: ConfirmOptions): Promise<boolean> {
+    return new Promise((resolve) => {
+      confirmations.value.push({ ...options })
+      confirmationResolvers.push(resolve)
+    })
+  }
+
+  function resolveConfirmation(confirmed: boolean): void {
+    confirmations.value.shift()
+    confirmationResolvers.shift()?.(confirmed)
+  }
+
+  function apiError(error: unknown, fallbackMessage?: string): number {
+    const message =
+      error instanceof ApiError
+        ? [
+            error.message,
+            ...Object.values(error.errors)
+              .flat()
+              .filter((text) => text !== error.message),
+          ].join('\n')
+        : (fallbackMessage ?? 'A apărut o eroare. Încearcă din nou.')
+    return show('error', message)
+  }
 
   function dismiss(id: number): void {
     clearTimeout(timers.get(id))
@@ -54,10 +89,16 @@ export const useNotificationStore = defineStore('notifications', () => {
     timers.forEach(clearTimeout)
     timers.clear()
     recent.clear()
+    confirmationResolvers.splice(0).forEach((resolve) => resolve(false))
+    confirmations.value = []
   })
 
   return {
     notifications,
+    confirmations,
+    confirm,
+    resolveConfirmation,
+    apiError,
     dismiss,
     success: (message: string, duration?: number) => show('success', message, duration),
     error: (message: string, duration?: number) => show('error', message, duration),

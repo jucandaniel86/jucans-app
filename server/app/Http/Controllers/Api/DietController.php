@@ -192,4 +192,33 @@
 
       return DietSourceResource::collection($diet->sources()->orderBy('id', 'desc')->get());
     }
+
+    /**
+     * @url PATCH /diets/{diet}/sources/{sourceId}
+     */
+
+    public function updateDietSource(SaveSourceRequest $request, Diet $diet, int $sourceId): AnonymousResourceCollection
+    {
+      $source = $diet->sources()
+        ->whereKey($sourceId)
+        ->firstOrFail();
+
+      $source->update($request->validated());
+
+      return DietSourceResource::collection($diet->sources()->orderBy('id', 'desc')->get());
+    }
+
+    /**
+     * @url DELETE /diets/{diet}/sources/{sourceId}
+     */
+    public function deleteDietSource(Diet $diet, int $sourceId): AnonymousResourceCollection
+    {
+      $source = $diet->sources()
+        ->whereKey($sourceId)
+        ->firstOrFail();
+
+      $source->delete();
+
+      return DietSourceResource::collection($diet->sources()->orderBy('id', 'desc')->get());
+    }
   }

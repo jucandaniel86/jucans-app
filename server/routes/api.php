@@ -68,6 +68,8 @@
       );
       Route::get('/{diet}', [DietController::class, 'show']);
       Route::post('/{diet}/sources', [DietController::class, 'addDietSource']);
+      Route::patch('/{diet}/sources/{sourceId}', [DietController::class, 'updateDietSource']);
+      Route::delete('/{diet}/sources/{sourceId}', [DietController::class, 'deleteDietSource']);
     });
 
     Route::prefix('admin')->middleware('admin')->group(function () {

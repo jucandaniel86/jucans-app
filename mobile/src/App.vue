@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
+import AppConfirmation from '@/components/app/AppConfirmation.vue'
 import AppLoading from '@/components/app/AppLoading.vue'
 import AppNotifications from '@/components/app/AppNotifications.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -49,4 +50,5 @@ watch(isAuthenticated, async () => {
     </Transition>
   </RouterView>
   <AppNotifications />
+  <AppConfirmation />
 </template>
