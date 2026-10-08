@@ -23,15 +23,20 @@ const emit = defineEmits<{
 }>()
 
 //models
-const savingIds = ref<number>(0)
+const savingId = ref<number | null>(null)
 
 //composables
 const notifications = useNotificationStore()
 
+//methods
 const searchIngredients = async (search: string): Promise<AdminIngredient[]> => {
   const response = await foodApi.listAdminIngredients({ search })
-  return response.data
+
+  const existingIds = new Set(props.ingredients.map((ingredient) => ingredient.id))
+
+  return response.data.filter((ingredient) => !existingIds.has(ingredient.id))
 }
+
 const handleIngredientSelected = async (item: AdminIngredient) => {
   try {
     const response = await dietsApi.addIngredient(props.dietId, item.id)
@@ -57,7 +62,7 @@ const handleDelete = async (ingredientId: number) => {
 
     emit('reloadList', response.data)
 
-    notifications.success('Ingredient a fost ștearsă.')
+    notifications.success('Ingredient a fost șters.')
   } catch (err) {
     notifications.apiError(err, 'Nu am putut șterge ingredientul.')
   }
@@ -65,7 +70,7 @@ const handleDelete = async (ingredientId: number) => {
 
 const handleSave = async (payload: DietIngredient) => {
   try {
-    savingIds.value = payload.id
+    savingId.value = payload.id
 
     const response = await dietsApi.saveIngredient(props.dietId, payload)
 
@@ -74,7 +79,7 @@ const handleSave = async (payload: DietIngredient) => {
   } catch (err) {
     notifications.apiError(err)
   } finally {
-    savingIds.value = 0
+    savingId.value = null
   }
 }
 </script>
@@ -100,7 +105,7 @@ const handleSave = async (payload: DietIngredient) => {
         v-for="ingredient in props.ingredients"
         :key="ingredient.id"
         :ingredient="ingredient"
-        :disable-actions="savingIds === ingredient.id"
+        :disable-actions="savingId === ingredient.id"
         @delete="handleDelete"
         @save="handleSave"
       />

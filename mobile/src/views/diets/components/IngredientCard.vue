@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import { dietIngredientStatus } from '@/config/dietIngredientStatus'
 import { DietIngredientStatus, type DietIngredient } from '@/types/diets'
 
@@ -20,10 +20,14 @@ const emit = defineEmits<{
   delete: [sourceId: number]
 }>()
 
-const ingredientPayload = reactive<{ status: string; notes: string; id: number }>({
-  status: props.ingredient.status,
-  notes: props.ingredient.notes || '',
+const ingredientPayload = reactive<{
+  id: number
+  status: DietIngredientStatus
+  notes: string
+}>({
   id: props.ingredient.id,
+  status: props.ingredient.status,
+  notes: props.ingredient.notes ?? '',
 })
 
 const statusLabel = computed(
@@ -33,6 +37,15 @@ const statusOptions = Object.entries(dietIngredientStatus).map(([value, item]) =
   value,
   label: item.label,
 }))
+
+watch(
+  () => props.ingredient,
+  (ingredient: DietIngredient) => {
+    ingredientPayload.status = ingredient.status
+    ingredientPayload.notes = ingredient.notes ?? ''
+    ingredientPayload.id = ingredient.id
+  },
+)
 </script>
 <template>
   <div class="ingredient-card">
@@ -51,9 +64,8 @@ const statusOptions = Object.entries(dietIngredientStatus).map(([value, item]) =
         type="button"
         class="ingredient-action__btn"
         @click="emit('save', ingredientPayload)"
-        aria-label="Editează ingredientul"
+        aria-label="Salvează ingredientul"
         :loading="props.disableActions"
-        app-button__label
       >
         <SaveIcon />
         Salveaza
