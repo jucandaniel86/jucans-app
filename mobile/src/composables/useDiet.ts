@@ -1,4 +1,4 @@
-import { DietStatus, type Diet } from '@/types/diets'
+import { DietStatus, type Diet, type DietSource } from '@/types/diets'
 import { reactive } from 'vue'
 
 export function useDiet() {

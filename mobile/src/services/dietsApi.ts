@@ -4,6 +4,8 @@ import type {
   DietDetailResponse,
   CreatedDietResponse,
   DietDailyStructureResponse,
+  DietSource,
+  DietSourcesResponse,
 } from '@/types/diets'
 
 export const dietsApi = {
@@ -41,5 +43,9 @@ export const dietsApi = {
 
   deleteDailyStructure(dietId: number, itemId: number): Promise<DietDailyStructureResponse> {
     return api.delete<DietDailyStructureResponse>(`/diets/${dietId}/daily-structure/${itemId}`)
+  },
+
+  addSource(dietId: number, payload: DietSource): Promise<DietSourcesResponse> {
+    return api.post<DietSourcesResponse>(`/diets/${dietId}/sources`, payload)
   },
 }

@@ -1,0 +1,64 @@
+.source-card {
+  display: flex;
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  gap: var(--space-2);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition:
+    transform var(--transition-fast),
+    border-color var(--transition-fast);
+  flex-direction: column;
+}
+
+.source-card__title {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  align-items: center;
+}
+
+.source-card__title span:first-child {
+  font-weight: bold;
+}
+
+.source-card__link {
+  color: #5d5d5d;
+  font-size: 0.8rem;
+}
+
+.source-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+.source-card-action__btn {
+  border: 1px solid #d9d9d9;
+  border-radius: var(--space-3);
+  padding: var(--space-2);
+  font-size: 0.8rem;
+  background-color: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: #5d5d5d;
+}
+
+.source-card-action__btn.delete {
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
+.source-card__oficial {
+  background-color: #def3e5;
+  color: #3a843f;
+  border-radius: var(--space-4);
+  padding: var(--space-2);
+  font-size: 0.8rem;
+  font-weight: bold;
+}

@@ -9,8 +9,16 @@
   class DietSource extends Model
   {
     use HasFactory;
- 
+
     protected $casts = [
       'type' => DietSourceType::class,
+    ];
+
+    protected $fillable = [
+      'type',
+      'is_official',
+      'title',
+      'url',
+      'notes',
     ];
   }

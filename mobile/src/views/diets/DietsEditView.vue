@@ -10,8 +10,9 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
 import AppTextarea from '@/components/ui/AppTextarea.vue'
 import AppTabs from '@/components/app/AppTabs.vue'
-import DietDailyStructure from './partials/DietDailyStructure.vue'
+import DietDailyStructure from './partials/DietDailyStructure.view.vue'
 import type { DailyStructureConfig } from '@/types/diets.ts'
+import DietSources from './partials/DietSources.view.vue'
 
 //models
 const loading = ref(false)
@@ -125,6 +126,13 @@ watch(
             :daily-structure-config="dailyStructure"
             :daily-structure="draftDiet.diet.daily_structure"
             :diet-id="draftDiet.diet.id"
+            @reload-list="draftDiet.diet.daily_structure = $event"
+          />
+          <DietSources
+            v-else-if="activeTab === 'sources'"
+            :items="draftDiet.diet.sources"
+            :diet-id="draftDiet.diet.id"
+            @reload-list="draftDiet.diet.sources = $event"
           />
         </div>
       </div>

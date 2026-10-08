@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import type { DailyStructureConfig, DietDailyStructure } from '@/types/diets.ts'
 import { dietsApi } from '@/services/dietsApi'
 import { useNotificationStore } from '@/stores/notifications'
@@ -14,11 +14,15 @@ const props = defineProps<{
   dietId: number
 }>()
 
+//emits
+const emit = defineEmits<{
+  reloadList: [items: DietDailyStructure[]]
+}>()
+
 //models
 const show = ref(false)
 const addMealType = ref<number | null>(null)
 const saveState = ref(false)
-const items = ref<DietDailyStructure[]>([])
 
 //composables
 const { error, success } = useNotificationStore()
@@ -38,7 +42,7 @@ const saveDailyStructure = async () => {
     const response = await dietsApi.addDailyStructure(props.dietId, {
       daily_structure_id: addMealType.value,
     })
-    items.value = response.data
+    emit('reloadList', response.data)
     show.value = false
     addMealType.value = null
     success('Structura mesei a fost adaugat cu succes!')
@@ -53,23 +57,14 @@ const saveDailyStructure = async () => {
 const changeOrder = async (itemId: number, direction: 'up' | 'down') => {
   const response = await dietsApi.changeDailyStructureOrder(props.dietId, itemId, direction)
   success('Ordinea a fost schimbata cu succes!')
-  items.value = response.data
+  emit('reloadList', response.data)
 }
 
 const deleteItem = async (itemId: number) => {
   const response = await dietsApi.deleteDailyStructure(props.dietId, itemId)
   success('Tipul a fost sters cu succes!')
-  items.value = response.data
+  emit('reloadList', response.data)
 }
-
-//watch
-watch(
-  () => props.dailyStructure,
-  (dailyStructure) => {
-    items.value = [...dailyStructure]
-  },
-  { immediate: true },
-)
 </script>
 <template>
   <AppModal v-model="show" title="Structura zilnică a dietei">
@@ -90,7 +85,7 @@ watch(
       </tr>
     </thead>
     <tbody>
-      <tr v-for="(item, index) in items" :key="item.id">
+      <tr v-for="(item, index) in props.dailyStructure" :key="item.id">
         <td width="80%">{{ item.structure.name }}</td>
         <td>
           <button
@@ -103,7 +98,7 @@ watch(
         </td>
         <td>
           <button
-            :disabled="index === items.length - 1"
+            :disabled="index === props.dailyStructure.length - 1"
             class="diet-daily-structure-action__btn"
             @click.prevent="changeOrder(item.id, 'down')"
           >

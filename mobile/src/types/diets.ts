@@ -23,8 +23,8 @@ export interface DietSource {
   title: string
   url: string | null
   notes: string | null
-  created_at: string | null
-  updated_at: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export interface DailyStructureConfig {
@@ -57,3 +57,4 @@ export type DietDetailResponse = ResourceItem<Diet>
 export type CreatedDietResponse = ResourceItem<Diet>
 export type DailyStructureResponse = ResourceItem<DailyStructureConfig[]>
 export type DietDailyStructureResponse = ResourceItem<DietDailyStructure[]>
+export type DietSourcesResponse = ResourceItem<DietSource[]>
