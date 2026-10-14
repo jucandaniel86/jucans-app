@@ -7,16 +7,33 @@ import type {
   DietSource,
   DietSourcesResponse,
   DietIngredientsResponse,
-  DietIngredient,
+  DietIngredientUpdate,
+  DietGeneralInfoInput,
+  DietListResponse,
 } from '@/types/diets'
 
 export const dietsApi = {
+  getDiets(): Promise<DietListResponse> {
+    return api.get<DietListResponse>('/diets')
+  },
+
   createDraftDiet(data: { name: string }): Promise<CreatedDietResponse> {
     return api.post('/diets', data)
   },
 
   getDiet(dietId: number): Promise<DietDetailResponse> {
     return api.get<DietDetailResponse>(`/diets/${dietId}`)
+  },
+
+  updateDiet(dietId: number, input: DietGeneralInfoInput): Promise<DietDetailResponse> {
+    const formData = new FormData()
+    formData.append('_method', 'PATCH')
+    formData.append('name', input.name)
+    formData.append('description', input.description ?? '')
+    formData.append('notes', input.notes ?? '')
+    if (input.thumbnail) formData.append('thumbnail', input.thumbnail)
+    if (input.removeThumbnail) formData.append('remove_thumbnail', '1')
+    return api.post<DietDetailResponse>(`/diets/${dietId}`, formData)
   },
 
   getDailyStructureConfig(): Promise<DailyStructureResponse> {
@@ -73,7 +90,7 @@ export const dietsApi = {
     return api.delete<DietIngredientsResponse>(`/diets/${dietId}/ingredients/${ingredientId}`)
   },
 
-  saveIngredient(dietId: number, payload: DietIngredient): Promise<DietIngredientsResponse> {
+  saveIngredient(dietId: number, payload: DietIngredientUpdate): Promise<DietIngredientsResponse> {
     return api.patch<DietIngredientsResponse>(`/diets/${dietId}/ingredients/${payload.id}`, payload)
   },
 }

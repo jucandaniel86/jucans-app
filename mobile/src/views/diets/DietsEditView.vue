@@ -7,11 +7,10 @@ import { dietsApi } from '@/services/dietsApi'
 import { useDiet } from '@/composables/useDiet'
 //components
 import AppButton from '@/components/ui/AppButton.vue'
-import AppInput from '@/components/ui/AppInput.vue'
-import AppTextarea from '@/components/ui/AppTextarea.vue'
+import DietGeneralInfo from './partials/DietGeneralInfo.vue'
 import AppTabs from '@/components/app/AppTabs.vue'
 import DietDailyStructure from './partials/DietDailyStructure.view.vue'
-import type { DailyStructureConfig } from '@/types/diets.ts'
+import type { DailyStructureConfig, Diet } from '@/types/diets.ts'
 import DietSources from './partials/DietSources.view.vue'
 import DietIngredients from './partials/DietIngredients.vue'
 
@@ -47,7 +46,16 @@ const loadDiet = async () => {
 
 const loadDailyStructure = async () => await dietsApi.getDailyStructureConfig()
 
-const saveDiet = async () => {}
+const updateGeneralInfo = (diet: Diet) => {
+  Object.assign(draftDiet.diet, {
+    name: diet.name,
+    description: diet.description,
+    notes: diet.notes,
+    thumbnail: diet.thumbnail,
+    thumbnail_url: diet.thumbnail_url,
+    updated_at: diet.updated_at,
+  })
+}
 
 watch(
   () => route.params.id,
@@ -79,12 +87,14 @@ watch(
       Înapoi la diete
     </AppButton>
   </section>
-  <form v-else class="add-diet" novalidate @submit.prevent="saveDiet">
+  <div v-else class="add-diet">
     <header class="add-diet__intro">
       <span class="add-diet__icon" aria-hidden="true">🍳</span>
       <div>
         <p>Food</p>
-        <h1 v-html="`Editează dieta <strong>${draftDiet.diet.name || ''}</strong>`" />
+        <h1>
+          Editează dieta <strong>{{ draftDiet.diet.name }}</strong>
+        </h1>
       </div>
     </header>
 
@@ -97,20 +107,7 @@ watch(
         </div>
       </header>
     </section>
-    <div class="form-section__body">
-      <AppInput
-        v-model="draftDiet.diet.name"
-        label="Numele dietei"
-        placeholder="Dieta de slabit"
-        :maxlength="255"
-      />
-      <AppTextarea
-        v-model="draftDiet.diet.description"
-        label="Descriere"
-        placeholder="Ce e special la dieta asta?"
-        :rows="4"
-      />
-    </div>
+    <DietGeneralInfo :key="draftDiet.diet.id" :diet="draftDiet.diet" @updated="updateGeneralInfo" />
     <section class="form-section">
       <header class="form-section__header">
         <span>2</span>
@@ -145,7 +142,7 @@ watch(
         </div>
       </div>
     </section>
-  </form>
+  </div>
 </template>
 <style lang="css" scoped>
 @import './styles/diets-edit.style.css';

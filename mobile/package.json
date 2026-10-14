@@ -14,7 +14,8 @@
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
     "format": "prettier --write --experimental-cli src/",
-    "ios": "npm run build && npx cap sync ios"
+    "ios": "npm run build && npx cap sync ios",
+    "android": "npm run build && npx cap sync android"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",

@@ -56,12 +56,15 @@ export interface DietIngredient {
   status: DietIngredientStatus
 }
 
+export type DietIngredientUpdate = Pick<DietIngredient, 'id' | 'status' | 'notes'>
+
 export interface Diet {
   id: number
   name: string
   description: string | null
   notes: string | null
   thumbnail: string | null
+  thumbnail_url?: string | null
   status: DietStatus
   created_at: string | null
   updated_at: string | null
@@ -71,6 +74,14 @@ export interface Diet {
 }
 
 export type DietDetailResponse = ResourceItem<Diet>
+export type DietListResponse = ResourceItem<Diet[]>
+export interface DietGeneralInfoInput {
+  name: string
+  description: string | null
+  notes: string | null
+  thumbnail?: File | null
+  removeThumbnail?: boolean
+}
 export type CreatedDietResponse = ResourceItem<Diet>
 export type DailyStructureResponse = ResourceItem<DailyStructureConfig[]>
 export type DietDailyStructureResponse = ResourceItem<DietDailyStructure[]>

@@ -25,4 +25,18 @@ describe('RecipeImageInput', () => {
     await wrapper.find('button').trigger('click')
     expect(wrapper.emitted('remove')).toHaveLength(1)
   })
+
+  it('preserves recipe labels, file selection and disabled controls after extraction', async () => {
+    const wrapper = mount(RecipeImageInput, { props: { previewUrl: null, hasImage: false } })
+    expect(wrapper.text()).toContain('Imagine rețetă')
+    expect(wrapper.get('img').attributes('alt')).toBe('Previzualizare imagine rețetă')
+    const file = new File(['image'], 'recipe.png', { type: 'image/png' })
+    Object.defineProperty(wrapper.get('input').element, 'files', { value: [file] })
+    await wrapper.get('input').trigger('change')
+    expect(wrapper.emitted('select')?.[0]).toEqual([file])
+    expect(wrapper.get('input').attributes('accept')).toBe('image/jpeg,image/png,image/webp')
+    await wrapper.setProps({ hasImage: true, disabled: true })
+    expect(wrapper.get('input').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('button').attributes('disabled')).toBeDefined()
+  })
 })

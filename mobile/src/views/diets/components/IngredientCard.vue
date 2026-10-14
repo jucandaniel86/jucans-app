@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
 import { dietIngredientStatus } from '@/config/dietIngredientStatus'
-import { DietIngredientStatus, type DietIngredient } from '@/types/diets'
+import { DietIngredientStatus, type DietIngredient, type DietIngredientUpdate } from '@/types/diets'
 
 //components
 import AppSelect from '@/components/ui/AppSelect.vue'
@@ -16,15 +16,11 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  save: [source: DietIngredient]
+  save: [source: DietIngredientUpdate]
   delete: [sourceId: number]
 }>()
 
-const ingredientPayload = reactive<{
-  id: number
-  status: DietIngredientStatus
-  notes: string
-}>({
+const ingredientPayload = reactive<DietIngredientUpdate & { notes: string }>({
   id: props.ingredient.id,
   status: props.ingredient.status,
   notes: props.ingredient.notes ?? '',

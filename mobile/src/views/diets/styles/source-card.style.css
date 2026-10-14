@@ -28,6 +28,8 @@
 .source-card__link {
   color: #5d5d5d;
   font-size: 0.8rem;
+  max-width: 100%;
+  word-break: break-all;
 }
 
 .source-card__actions {

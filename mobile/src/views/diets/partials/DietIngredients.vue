@@ -5,7 +5,7 @@ import type { AdminIngredient } from '@/types/food'
 import { foodApi } from '@/services/foodApi'
 import { dietsApi } from '@/services/dietsApi'
 import { useNotificationStore } from '@/stores/notifications'
-import { type DietIngredient } from '@/types/diets'
+import { type DietIngredient, type DietIngredientUpdate } from '@/types/diets'
 //components
 import PlusIcon from '@/components/icons/plusIcon.vue'
 import IngredientCard from '../components/IngredientCard.vue'
@@ -68,7 +68,7 @@ const handleDelete = async (ingredientId: number) => {
   }
 }
 
-const handleSave = async (payload: DietIngredient) => {
+const handleSave = async (payload: DietIngredientUpdate) => {
   try {
     savingId.value = payload.id
 
