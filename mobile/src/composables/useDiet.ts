@@ -15,6 +15,7 @@ export function useDiet() {
     sources: [],
     daily_structure: [],
     ingredients: [],
+    recipes: [],
   })
 
   const activeTabs = [
@@ -38,6 +39,7 @@ export function useDiet() {
       sources: existingDiet.sources,
       daily_structure: existingDiet.daily_structure,
       ingredients: existingDiet.ingredients,
+      recipes: existingDiet.recipes ?? [],
     })
   }
 

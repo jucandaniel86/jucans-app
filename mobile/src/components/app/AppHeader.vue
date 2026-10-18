@@ -4,10 +4,13 @@ import UserAvatar from '@/components/user/UserAvatar.vue'
 defineProps<{
   username: string
   avatar: string | null
+  showShopping?: boolean
+  shoppingCount?: number
 }>()
 
 defineEmits<{
   openMenu: []
+  openShopping: []
 }>()
 </script>
 
@@ -29,10 +32,25 @@ defineEmits<{
         Jucans<span aria-hidden="true">.</span>
       </div>
 
-      <span class="app-header__username">
-        <UserAvatar :avatar="avatar" :username="username" size="small" />
-        {{ username }}
-      </span>
+      <div class="app-header__actions">
+        <button
+          v-if="showShopping"
+          class="app-header__shopping"
+          type="button"
+          aria-haspopup="dialog"
+          :aria-label="`Deschide lista de cumpărături: ${shoppingCount ?? 0} produse necumpărate`"
+          @click="$emit('openShopping')"
+        >
+          <span aria-hidden="true">🛒</span>
+          <span class="app-header__shopping-count" aria-hidden="true">{{
+            shoppingCount ?? 0
+          }}</span>
+        </button>
+        <span class="app-header__username">
+          <UserAvatar :avatar="avatar" :username="username" size="small" />
+          {{ username }}
+        </span>
+      </div>
     </div>
   </header>
 </template>
@@ -100,6 +118,39 @@ defineEmits<{
 
 .app-header__brand span {
   color: var(--color-pink);
+}
+
+.app-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.app-header__shopping {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.35rem;
+}
+
+.app-header__shopping-count {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 18px;
+  padding: 1px 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-strong);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 800;
 }
 
 .app-header__username {

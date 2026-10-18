@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{
   recipe: RecipeSummary
+  readonly?: boolean
 }>()
 
 const router = useRouter()
@@ -50,7 +51,7 @@ function editRecipe(): void {
         <div class="recipe-card__title-row">
           <h2>{{ recipe.name }}</h2>
           <button
-            v-if="authStore.user && authStore.user.is_admin"
+            v-if="!readonly && authStore.user && authStore.user.is_admin"
             type="button"
             :aria-label="`Editează rețeta ${recipe.name}`"
             @click.stop="editRecipe"
@@ -86,6 +87,7 @@ function editRecipe(): void {
         <span>{{ recipe.creator.username }}</span>
       </div>
       <AppButton
+        v-if="!readonly"
         class="recipe-card__shopping-button"
         variant="secondary"
         :loading="adding"

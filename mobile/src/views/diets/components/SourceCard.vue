@@ -7,6 +7,7 @@ import TrashIcon from '@/components/icons/trashIcon.vue'
 
 const props = defineProps<{
   item: DietSource
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -25,9 +26,10 @@ const emit = defineEmits<{
       <span v-if="item.is_official" class="source-card__oficial">Oficial</span>
     </div>
     <div v-if="item.url" class="source-card__link">
-      <a :href="item.url" target="_blank">{{ item.url }}</a>
+      <a :href="item.url" target="_blank" rel="noopener noreferrer">{{ item.url }}</a>
     </div>
-    <div class="source-card__actions">
+    <p v-if="readonly && item.notes" class="source-card__notes">{{ item.notes }}</p>
+    <div v-if="!readonly" class="source-card__actions">
       <button
         type="button"
         class="source-card-action__btn"
@@ -50,4 +52,9 @@ const emit = defineEmits<{
 </template>
 <style scoped lang="css">
 @import url(../styles/source-card.style.css);
+
+.source-card__notes {
+  margin: 0;
+  white-space: pre-wrap;
+}
 </style>

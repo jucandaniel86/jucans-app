@@ -15,6 +15,13 @@ import ShoppingListsView from '@/views/ShoppingListsView.vue'
 //diets
 import DietsListsView from '@/views/diets/DietsListView.vue'
 import DietsEditView from '@/views/diets/DietsEditView.vue'
+import DietDetailView from '@/views/diets/DietDetailView.vue'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    shoppingList?: 'floating' | 'header' | 'hidden'
+  }
+}
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -23,32 +30,34 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: LoginView,
-      meta: { guestOnly: true },
+      meta: { guestOnly: true, shoppingList: 'hidden' },
     },
     {
       path: '/',
       component: AppLayout,
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, shoppingList: 'header' },
       children: [
         { path: 'shopping-lists', name: 'shopping-lists', component: ShoppingListsView },
         { path: 'diets-lists', name: 'diets-lists', component: DietsListsView },
-        { path: 'diets/:id', name: 'diet-edit', component: DietsEditView },
+        { path: 'diets/:id', name: 'diet-detail', component: DietDetailView },
+        { path: 'diets/:id/edit', name: 'diet-edit', component: DietsEditView },
         {
           path: 'shopping-lists/:id',
           name: 'shopping-list-detail',
           component: ShoppingListView,
-          meta: { shoppingDetail: true },
+          meta: { shoppingDetail: true, shoppingList: 'hidden' },
         },
         {
           path: 'shopping-list',
           name: 'shopping-list',
           component: ShoppingListView,
-          meta: { shoppingDetail: true },
+          meta: { shoppingDetail: true, shoppingList: 'hidden' },
         },
         {
           path: '',
           name: 'home',
           component: HomeView,
+          meta: { shoppingList: 'floating' },
         },
         {
           path: 'recipes',
@@ -79,13 +88,13 @@ const router = createRouter({
           path: 'admin/ingredients',
           name: 'admin-ingredients',
           component: AdminIngredientsView,
-          meta: { requiresAdmin: true },
+          meta: { requiresAdmin: true, shoppingList: 'hidden' },
         },
         {
           path: 'admin/recipe-reviews',
           name: 'admin-recipe-reviews',
           component: AdminRecipeReviewsView,
-          meta: { requiresAdmin: true },
+          meta: { requiresAdmin: true, shoppingList: 'hidden' },
         },
       ],
     },

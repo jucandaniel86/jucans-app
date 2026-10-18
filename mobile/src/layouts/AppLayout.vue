@@ -5,6 +5,7 @@ import { RouterView, useRoute } from 'vue-router'
 import AppDrawer from '@/components/app/AppDrawer.vue'
 import AppHeader from '@/components/app/AppHeader.vue'
 import { useAuthStore } from '@/stores/auth'
+import ShoppingListOverlay from '@/components/shopping/ShoppingListOverlay.vue'
 import FloatingShoppingList from '@/components/shopping/FloatingShoppingList.vue'
 import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
 
@@ -13,14 +14,12 @@ const shopping = useActiveShoppingListStore()
 const route = useRoute()
 const shoppingExpanded = ref(false)
 const shoppingHeight = ref(120)
+const shoppingOverlayOpen = ref(false)
+const shoppingMode = computed(() => route.meta.shoppingList ?? 'header')
 const showShopping = computed(
-  () =>
-    shopping.list !== null &&
-    !drawerOpen.value &&
-    route.name !== 'shopping-list' &&
-    !route.meta.shoppingDetail &&
-    !route.meta.requiresAdmin,
+  () => shoppingMode.value === 'floating' && shopping.list !== null && !drawerOpen.value,
 )
+const showHeaderShopping = computed(() => shoppingMode.value === 'header' && shopping.list !== null)
 const drawerOpen = ref(false)
 const loggingOut = ref(false)
 const updatingAvatar = ref(false)
@@ -29,17 +28,22 @@ const username = computed(() => authStore.user?.username ?? '')
 const avatar = computed(() => authStore.user?.avatar ?? null)
 
 const previousOverflow = document.body.style.overflow
-watch([drawerOpen, shoppingExpanded], ([drawer, expanded]) => {
-  document.body.style.overflow = drawer || expanded ? 'hidden' : previousOverflow
+watch([drawerOpen, shoppingExpanded, shoppingOverlayOpen], ([drawer, expanded, overlay]) => {
+  document.body.style.overflow = drawer || expanded || overlay ? 'hidden' : previousOverflow
 })
 watch(
   () => route.fullPath,
   () => {
     shoppingExpanded.value = false
+    shoppingOverlayOpen.value = false
   },
 )
 watch(drawerOpen, () => {
   shoppingExpanded.value = false
+  shoppingOverlayOpen.value = false
+})
+watch(showHeaderShopping, (visible) => {
+  if (!visible) shoppingOverlayOpen.value = false
 })
 onMounted(() => shopping.load())
 
@@ -79,10 +83,17 @@ async function updateAvatar(nextAvatar: string): Promise<void> {
     <div
       class="app-layout__page"
       :class="{ 'app-layout__page--shopping-detail': route.meta.shoppingDetail }"
-      :inert="drawerOpen || shoppingExpanded ? true : undefined"
-      :aria-hidden="drawerOpen || shoppingExpanded"
+      :inert="drawerOpen || shoppingExpanded || shoppingOverlayOpen ? true : undefined"
+      :aria-hidden="drawerOpen || shoppingExpanded || shoppingOverlayOpen"
     >
-      <AppHeader :username="username" :avatar="avatar" @open-menu="drawerOpen = true" />
+      <AppHeader
+        :username="username"
+        :avatar="avatar"
+        :show-shopping="showHeaderShopping"
+        :shopping-count="shopping.list?.unchecked_items_count ?? 0"
+        @open-menu="drawerOpen = true"
+        @open-shopping="shoppingOverlayOpen = true"
+      />
       <main
         class="app-layout__content"
         :class="{
@@ -99,6 +110,11 @@ async function updateAvatar(nextAvatar: string): Promise<void> {
       v-if="showShopping"
       v-model:expanded="shoppingExpanded"
       @occupied-height="shoppingHeight = $event"
+    />
+
+    <ShoppingListOverlay
+      v-if="shoppingOverlayOpen && showHeaderShopping"
+      @close="shoppingOverlayOpen = false"
     />
 
     <AppDrawer

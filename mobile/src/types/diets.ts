@@ -1,3 +1,5 @@
+import type { RecipeSummary } from '@/types/food'
+
 export enum DietStatus {
   DRAFT = 'draft',
   COMPLETED = 'completed',
@@ -58,6 +60,14 @@ export interface DietIngredient {
 
 export type DietIngredientUpdate = Pick<DietIngredient, 'id' | 'status' | 'notes'>
 
+export type DietRecipePriority = 'normal' | 'high' | 'required'
+
+export interface DietRecipe extends RecipeSummary {
+  priority: DietRecipePriority
+}
+
+export type DietRecipesResponse = ResourceItem<DietRecipe[]>
+
 export interface Diet {
   id: number
   name: string
@@ -71,6 +81,7 @@ export interface Diet {
   sources: DietSource[]
   daily_structure: DietDailyStructure[]
   ingredients: DietIngredient[]
+  recipes?: DietRecipe[]
 }
 
 export type DietDetailResponse = ResourceItem<Diet>

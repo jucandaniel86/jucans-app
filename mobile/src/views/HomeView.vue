@@ -134,7 +134,6 @@ onBeforeUnmount(() => {
   <section class="home-view">
     <header class="home-view__welcome">
       <p>Bună, {{ displayName }}! <span aria-hidden="true">👋</span></p>
-      <h1>Ce gătim azi?</h1>
     </header>
 
     <AppCard class="food-card">
@@ -191,7 +190,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .home-view {
   display: grid;
-  gap: var(--space-8);
+  gap: var(--space-4);
 }
 
 .home-view__welcome p {
@@ -211,9 +210,9 @@ onBeforeUnmount(() => {
 .food-card {
   position: relative;
   display: grid;
-  padding: var(--space-6);
+  padding: var(--space-4);
   overflow: hidden;
-  gap: var(--space-5);
+  gap: var(--space-2);
   background: var(--color-surface);
 }
 
@@ -231,8 +230,8 @@ onBeforeUnmount(() => {
 }
 
 .food-card__header h2 {
-  margin: var(--space-3) 0 0;
-  font-size: 1.35rem;
+  margin: var(--space-1) 0 0;
+  font-size: 1.2rem;
   line-height: 1.25;
   letter-spacing: 0;
 }
@@ -247,12 +246,16 @@ onBeforeUnmount(() => {
 .food-card__tags {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  max-height: 96px;
+  padding: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  gap: var(--space-1);
 }
 
 .food-card__tags button {
-  min-height: 42px;
-  padding: 0 var(--space-3);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-2);
   border: 1.5px solid var(--color-border);
   border-radius: var(--radius-pill);
   color: var(--color-text);
@@ -282,20 +285,26 @@ onBeforeUnmount(() => {
 .food-card__loading {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 
 .food-card__loading span {
   width: 112px;
-  height: 42px;
+  height: 44px;
   border-radius: var(--radius-pill);
   background: var(--color-background-strong);
 }
 
 .food-card__action {
   display: grid;
-  gap: var(--space-3);
+  align-items: center;
+  gap: var(--space-1);
   text-align: center;
+}
+
+.food-card__action :deep(.app-button) {
+  min-height: 48px;
+  padding: 0 var(--space-3);
 }
 
 .food-card__action p,
@@ -311,13 +320,25 @@ onBeforeUnmount(() => {
   font-weight: 650;
 }
 
+@media (min-width: 480px) {
+  .food-card__action {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    gap: var(--space-2);
+    text-align: left;
+  }
+
+  .food-card__action .food-card__error {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 359px) {
   .home-view__welcome h1 {
     font-size: 1.9rem;
   }
 
   .food-card {
-    padding: var(--space-5) var(--space-4);
+    padding: var(--space-3);
   }
 }
 </style>

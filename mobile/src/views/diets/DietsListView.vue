@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useNotificationStore } from '@/stores/notifications'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
+import TrashIcon from '@/components/icons/trashIcon.vue'
 import placeholder from '@/assets/jucans_logo.png'
 import { DietStatus, type Diet } from '@/types/diets'
 
@@ -18,6 +19,7 @@ const loadingDraftDietSave = ref(false)
 const diets = ref<Diet[]>([])
 const loading = ref(true)
 const failed = ref(false)
+const deletingDietId = ref<number | null>(null)
 const selectedStatus = ref<DietStatus | 'all'>('all')
 const filters = [
   { name: 'all', label: 'Toate' },
@@ -67,6 +69,27 @@ async function loadDiets(): Promise<void> {
     notifications.apiError(error, 'Nu am putut încărca dietele. Încearcă din nou.')
   } finally {
     loading.value = false
+  }
+}
+
+async function deleteDiet(diet: Diet): Promise<void> {
+  if (deletingDietId.value !== null) return
+  deletingDietId.value = diet.id
+  try {
+    const confirmed = await notifications.confirm({
+      title: 'Șterge dieta',
+      message: `Sigur vrei să ștergi dieta „${diet.name}”? Această acțiune este definitivă.`,
+      confirmText: 'Șterge',
+      cancelText: 'Anulează',
+    })
+    if (!confirmed) return
+    await dietsApi.deleteDiet(diet.id)
+    diets.value = diets.value.filter((item) => item.id !== diet.id)
+    notifications.success(`Dieta „${diet.name}” a fost ștearsă.`)
+  } catch (error) {
+    notifications.apiError(error, 'Nu am putut șterge dieta.')
+  } finally {
+    deletingDietId.value = null
   }
 }
 
@@ -139,9 +162,9 @@ const handleSaveDiet = async (data: { name: string }) => {
           class="diet-card"
         >
           <RouterLink
-            :to="{ name: 'diet-edit', params: { id: diet.id } }"
+            :to="{ name: 'diet-detail', params: { id: diet.id } }"
             class="diet-card__link"
-            :aria-label="`Editează dieta ${diet.name}`"
+            :aria-label="`Deschide dieta ${diet.name}`"
           >
             <img
               :src="image || placeholder"
@@ -158,6 +181,17 @@ const handleSaveDiet = async (data: { name: string }) => {
               }}</span>
             </div>
           </RouterLink>
+          <button
+            class="diet-card__delete"
+            type="button"
+            :aria-label="`Șterge dieta ${diet.name}`"
+            :title="`Șterge dieta ${diet.name}`"
+            :disabled="deletingDietId !== null"
+            :aria-busy="deletingDietId === diet.id"
+            @click.stop.prevent="deleteDiet(diet)"
+          >
+            <TrashIcon />
+          </button>
         </AppCard>
       </div>
     </div>

@@ -1,5 +1,7 @@
 import { api } from '@/services/api'
 import type {
+  DietRecipesResponse,
+  DietRecipePriority,
   DailyStructureResponse,
   DietDetailResponse,
   CreatedDietResponse,
@@ -10,11 +12,16 @@ import type {
   DietIngredientUpdate,
   DietGeneralInfoInput,
   DietListResponse,
+  DietStatus,
 } from '@/types/diets'
 
 export const dietsApi = {
   getDiets(): Promise<DietListResponse> {
     return api.get<DietListResponse>('/diets')
+  },
+
+  deleteDiet(dietId: number): Promise<void> {
+    return api.delete<void>(`/diets/${dietId}`)
   },
 
   createDraftDiet(data: { name: string }): Promise<CreatedDietResponse> {
@@ -33,6 +40,14 @@ export const dietsApi = {
     formData.append('notes', input.notes ?? '')
     if (input.thumbnail) formData.append('thumbnail', input.thumbnail)
     if (input.removeThumbnail) formData.append('remove_thumbnail', '1')
+    return api.post<DietDetailResponse>(`/diets/${dietId}`, formData)
+  },
+
+  updateDietStatus(dietId: number, status: DietStatus, name: string): Promise<DietDetailResponse> {
+    const formData = new FormData()
+    formData.append('_method', 'PATCH')
+    formData.append('name', name)
+    formData.append('status', status)
     return api.post<DietDetailResponse>(`/diets/${dietId}`, formData)
   },
 
@@ -92,5 +107,28 @@ export const dietsApi = {
 
   saveIngredient(dietId: number, payload: DietIngredientUpdate): Promise<DietIngredientsResponse> {
     return api.patch<DietIngredientsResponse>(`/diets/${dietId}/ingredients/${payload.id}`, payload)
+  },
+
+  addRecipe(
+    dietId: number,
+    recipeId: number,
+    priority: DietRecipePriority = 'normal',
+  ): Promise<DietRecipesResponse> {
+    return api.post<DietRecipesResponse>(`/diets/${dietId}/recipes`, {
+      recipe_id: recipeId,
+      priority,
+    })
+  },
+
+  saveRecipe(
+    dietId: number,
+    recipeId: number,
+    priority: DietRecipePriority,
+  ): Promise<DietRecipesResponse> {
+    return api.patch<DietRecipesResponse>(`/diets/${dietId}/recipes/${recipeId}`, { priority })
+  },
+
+  deleteRecipe(dietId: number, recipeId: number): Promise<DietRecipesResponse> {
+    return api.delete<DietRecipesResponse>(`/diets/${dietId}/recipes/${recipeId}`)
   },
 }

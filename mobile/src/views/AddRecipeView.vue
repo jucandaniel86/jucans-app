@@ -13,6 +13,7 @@ import AppTextarea from '@/components/ui/AppTextarea.vue'
 import { validateRecipeDraft } from '@/composables/recipeDraft'
 import { useRecipeDraft } from '@/composables/useRecipeDraft'
 import { foodApi } from '@/services/foodApi'
+import { dietsApi } from '@/services/dietsApi'
 import type { FoodTagPayload } from '@/types/food'
 
 const router = useRouter()
@@ -23,6 +24,23 @@ const loadingRecipe = ref(false)
 const loadError = ref('')
 const isEdit = computed(() => route.name === 'recipe-edit')
 const recipeId = computed(() => (isEdit.value ? Number(route.params.id) : null))
+const backToDietId = computed(() => {
+  const value = route.query.back_to_diet
+  if (isEdit.value || typeof value !== 'string' || !/^\d+$/.test(value)) return null
+  const id = Number(value)
+  return Number.isSafeInteger(id) && id > 0 ? id : null
+})
+const dietName = ref('')
+const associatingDiet = ref(false)
+const dietAssociationError = ref('')
+
+async function returnToDiet(): Promise<void> {
+  if (!backToDietId.value || draft.saving.value || associatingDiet.value) return
+  await router.replace({
+    path: `/diets/${backToDietId.value}/edit`,
+    query: { tab: 'recipes' },
+  })
+}
 
 const validation = computed(() =>
   validateRecipeDraft(draft.recipe, draft.reviewIngredients.value, Object.keys(draft.units.value)),
@@ -59,6 +77,16 @@ const saveBlockers = computed(() => {
 
 onMounted(async () => {
   const optionsPromise = draft.loadOptions()
+  if (backToDietId.value) {
+    void dietsApi
+      .getDiet(backToDietId.value)
+      .then((response) => {
+        dietName.value = response.data.name
+      })
+      .catch((error) => {
+        useNotificationStore().apiError(error, 'Nu am putut încărca numele dietei.')
+      })
+  }
 
   if (isEdit.value) {
     if (!Number.isInteger(recipeId.value) || (recipeId.value ?? 0) < 1) {
@@ -94,7 +122,27 @@ async function createTag(payload: FoodTagPayload): Promise<void> {
 }
 
 async function saveRecipe(): Promise<void> {
+  const dietId = backToDietId.value
+  // Once created, this recipe must never be submitted for creation again.
+  if (dietId && (draft.saving.value || draft.savedRecipe.value)) return
   const saved = await draft.save(recipeId.value)
+
+  if (saved && dietId && draft.savedRecipe.value) {
+    associatingDiet.value = true
+    dietAssociationError.value = ''
+    try {
+      await dietsApi.addRecipe(dietId, draft.savedRecipe.value.id, 'normal')
+    } catch (error) {
+      dietAssociationError.value =
+        'Rețeta a fost creată, dar nu a putut fi asociată dietei. Revino la dietă și folosește „Asociază rețetă” pentru asocierea manuală.'
+      useNotificationStore().apiError(error, 'Nu am putut asocia rețeta dietei.')
+      return
+    } finally {
+      associatingDiet.value = false
+    }
+    await returnToDiet()
+    return
+  }
 
   if (!saved && Object.keys(draft.ingredientErrors.value).length > 0) {
     await nextTick()
@@ -138,7 +186,16 @@ async function saveRecipe(): Promise<void> {
     <p>
       <strong>{{ draft.savedRecipe.value.name }}</strong> este acum în colecția familiei.
     </p>
-    <div class="recipe-success__actions">
+    <p v-if="backToDietId && associatingDiet" role="status">Se asociază rețeta dietei…</p>
+    <p v-if="dietAssociationError" class="recipe-save__error" role="alert">
+      {{ dietAssociationError }}
+    </p>
+    <div v-if="backToDietId" class="recipe-success__actions">
+      <AppButton block :disabled="associatingDiet" @click="returnToDiet()">
+        Înapoi la dietă
+      </AppButton>
+    </div>
+    <div v-else class="recipe-success__actions">
       <AppButton block @click="draft.startAnotherRecipe">Adaugă altă rețetă</AppButton>
       <AppButton
         block
@@ -159,6 +216,9 @@ async function saveRecipe(): Promise<void> {
       <div>
         <p>Food</p>
         <h1>{{ isEdit ? 'Editează rețeta' : 'Adaugă rețetă' }}</h1>
+        <small v-if="backToDietId" class="add-recipe__diet-context">
+          Rețetă pentru dieta {{ dietName || `#${backToDietId}` }}
+        </small>
       </div>
     </header>
 
@@ -314,6 +374,15 @@ async function saveRecipe(): Promise<void> {
       <AppButton type="submit" block :loading="draft.saving.value" :disabled="!canSave">
         {{ isEdit ? 'Salvează modificările' : 'Salvează rețeta' }}
       </AppButton>
+      <AppButton
+        v-if="backToDietId"
+        block
+        variant="secondary"
+        :disabled="draft.saving.value"
+        @click="returnToDiet()"
+      >
+        Anulează
+      </AppButton>
     </div>
   </form>
 </template>
@@ -368,6 +437,13 @@ async function saveRecipe(): Promise<void> {
   font-size: 0.76rem;
   font-weight: 850;
   text-transform: uppercase;
+}
+
+.add-recipe__diet-context {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
 }
 
 .add-recipe__intro h1 {
