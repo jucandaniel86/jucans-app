@@ -37,6 +37,11 @@ return [
             'label' => 'l',
             'aliases' => ['l', 'litru', 'litri'],
         ],
+        'cup' => [
+            'name' => 'Cană',
+            'label' => 'cup',
+            'aliases' => ['cup', 'cups', 'cană', 'cana', 'căni', 'cani'],
+        ],
         'teaspoon' => [
             'name' => 'Linguriță',
             'label' => 'lgț.',

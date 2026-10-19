@@ -177,6 +177,7 @@ export interface IngredientReviewDraft {
   sourceStatus: ResolverStatus | 'manual'
   resolution: IngredientResolution
   ingredientId: number | null
+  defaultUnit?: string | null
   name: string
   value: string
   unit: string

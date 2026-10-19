@@ -6,6 +6,7 @@ import IngredientAssociationSelector from '@/components/recipe/IngredientAssocia
 import AppInput from '@/components/ui/AppInput.vue'
 import AppSelect, { type SelectOption } from '@/components/ui/AppSelect.vue'
 import type { ExistingIngredient, IngredientReviewDraft } from '@/types/food'
+import { compatibleUnits, convertUnit } from '@/utils/unitConvertor'
 
 const props = defineProps<{
   item: IngredientReviewDraft
@@ -25,6 +26,72 @@ const emit = defineEmits<{
 }>()
 
 const associationOpen = ref(false)
+const conversionOpen = ref(false)
+const conversionTarget = ref('')
+const conversionOptions = computed(() => {
+  if (!props.item.value.trim()) return []
+  const value = Number(props.item.value.trim().replace(',', '.'))
+  const compatible = compatibleUnits(props.item.unit)
+  return props.units.filter((option) =>
+    compatible.includes(option.value) && convertUnit(value, props.item.unit, option.value) !== null,
+  )
+})
+const manualConversion = computed(() => {
+  if (!props.item.value.trim()) return null
+  const target = conversionOptions.value.find((option) => option.value === conversionTarget.value)
+  if (!target) return null
+  const value = convertUnit(
+    Number(props.item.value.trim().replace(',', '.')),
+    props.item.unit,
+    target.value,
+  )
+  return value === null ? null : {
+    value,
+    unit: target.value,
+    label: target.label.match(/\(([^()]*)\)$/)?.[1] ?? target.label,
+  }
+})
+
+watch(conversionOptions, (options) => {
+  if (!options.some((option) => option.value === conversionTarget.value)) {
+    conversionTarget.value = options[0]?.value ?? ''
+  }
+}, { immediate: true })
+
+function applyManualConversion(): void {
+  if (!manualConversion.value) return
+  emit('update', {
+    ...props.item,
+    value: String(manualConversion.value.value),
+    unit: manualConversion.value.unit,
+  })
+  conversionOpen.value = false
+}
+
+const conversion = computed(() => {
+  const { value, unit, defaultUnit, resolution } = props.item
+  if (resolution !== 'existing' || !value.trim() || !unit || !defaultUnit || unit === defaultUnit) {
+    return null
+  }
+  const target = props.units.find((option) => option.value === defaultUnit)
+  if (!target) return null
+  const converted = convertUnit(Number(value.trim().replace(',', '.')), unit, defaultUnit)
+  return converted === null ? null : {
+    value: converted,
+    unit: defaultUnit,
+    label: target.label.match(/\(([^()]*)\)$/)?.[1] ?? target.label,
+  }
+})
+
+function applyConversion(): void {
+  if (!conversion.value) return
+  emit('update', {
+    ...props.item,
+    value: String(conversion.value.value),
+    unit: conversion.value.unit,
+  })
+}
+
 const hasError = computed(() => Boolean(props.error && Object.keys(props.error).length > 0))
 
 const state = computed(() => {
@@ -44,6 +111,15 @@ function updateField<K extends keyof IngredientReviewDraft>(
   value: IngredientReviewDraft[K],
 ): void {
   emit('update', { ...props.item, [field]: value })
+}
+
+function selectIngredient(ingredient: ExistingIngredient): void {
+  if (props.item.sourceStatus === 'candidates') {
+    emit('chooseCandidate', ingredient)
+    associationOpen.value = false
+  } else {
+    emit('associate', ingredient)
+  }
 }
 
 watch(
@@ -94,10 +170,17 @@ watch(
           type="radio"
           :name="`${item.key}-candidate`"
           :checked="item.ingredientId === candidate.id && item.resolution === 'existing'"
-          @change="$emit('chooseCandidate', candidate)"
+          @change="associationOpen = false; $emit('chooseCandidate', candidate)"
         />
         <span>{{ candidate.name }}</span>
       </label>
+      <button
+        class="ingredient-card__associate"
+        type="button"
+        @click="associationOpen = true"
+      >
+        Caută alt ingredient existent
+      </button>
       <label
         class="candidate-choice"
         :class="{ 'candidate-choice--selected': item.resolution === 'new' }"
@@ -106,7 +189,7 @@ watch(
           type="radio"
           :name="`${item.key}-candidate`"
           :checked="item.resolution === 'new'"
-          @change="$emit('chooseNew')"
+          @change="associationOpen = false; $emit('chooseNew')"
         />
         <span>Este un ingredient nou</span>
       </label>
@@ -116,7 +199,7 @@ watch(
     </fieldset>
 
     <div
-      v-if="item.resolution === 'existing' && item.sourceStatus !== 'candidates'"
+      v-if="item.resolution === 'existing' && (item.sourceStatus !== 'candidates' || !item.candidates.some(candidate => candidate.id === item.ingredientId))"
       class="ingredient-card__name"
     >
       {{ item.name }}
@@ -132,7 +215,7 @@ watch(
     />
 
     <button
-      v-if="item.sourceStatus === 'unresolved' && item.resolution === 'new' && !associationOpen"
+      v-if="(item.sourceStatus === 'unresolved' || item.sourceStatus === 'manual') && item.resolution === 'new' && !associationOpen"
       class="ingredient-card__associate"
       type="button"
       @click="associationOpen = true"
@@ -141,12 +224,12 @@ watch(
     </button>
 
     <IngredientAssociationSelector
-      v-if="item.sourceStatus === 'unresolved' && item.resolution === 'new' && associationOpen"
+      v-if="associationOpen && (item.sourceStatus === 'candidates' || ((item.sourceStatus === 'unresolved' || item.sourceStatus === 'manual') && item.resolution === 'new'))"
       :initial-query="item.name"
       :saving="associationSaving"
       :error="associationError"
       @cancel="associationOpen = false"
-      @select="$emit('associate', $event)"
+      @select="selectIngredient"
     />
 
     <div
@@ -169,6 +252,34 @@ watch(
         :error="error?.unit"
         @update:model-value="updateField('unit', $event)"
       />
+    </div>
+    <div v-if="conversion" class="ingredient-card__conversion">
+      <span>Convert to {{ conversion.label }}: {{ conversion.value }} {{ conversion.label }}</span>
+      <button class="ingredient-card__associate" type="button" @click="applyConversion">
+        Aplică
+      </button>
+    </div>
+    <div v-if="conversionOptions.length">
+      <button
+        class="ingredient-card__associate"
+        type="button"
+        :aria-expanded="conversionOpen"
+        @click="conversionOpen = !conversionOpen"
+      >
+        Convert to...
+      </button>
+      <div v-if="conversionOpen" class="ingredient-card__conversion ingredient-card__conversion-picker">
+        <AppSelect v-model="conversionTarget" label="Convert to..." :options="conversionOptions" />
+        <span v-if="manualConversion">→ {{ manualConversion.value }} {{ manualConversion.label }}</span>
+        <button
+          class="ingredient-card__associate"
+          type="button"
+          :disabled="!manualConversion"
+          @click="applyManualConversion"
+        >
+          Aplică
+        </button>
+      </div>
     </div>
   </article>
 </template>
@@ -311,6 +422,20 @@ watch(
 
 .ingredient-card__measurements--to-taste {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.ingredient-card__conversion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: 0.83rem;
+}
+
+.ingredient-card__conversion-picker {
+  margin-top: var(--space-2);
 }
 
 .ingredient-card__error {

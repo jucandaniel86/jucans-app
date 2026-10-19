@@ -78,7 +78,7 @@ function valueInput(value: number | string | null): string {
 }
 
 function preferredUnit(result: IngredientResolverResult): string {
-  return result.unit ?? 'none'
+  return result.parsed.unit ?? result.ingredient?.default_unit ?? 'none'
 }
 
 export function mapResolverResults(results: IngredientResolverResult[]): IngredientReviewDraft[] {
@@ -94,6 +94,7 @@ export function mapResolverResults(results: IngredientResolverResult[]): Ingredi
           ? 'pending'
           : 'new',
       ingredientId: matchedIngredient?.id ?? null,
+      defaultUnit: matchedIngredient?.default_unit ?? null,
       name: matchedIngredient?.name ?? displayName(result.parsed.ingredient_text),
       value: valueInput(result.parsed.value),
       unit: preferredUnit(result),
@@ -141,8 +142,9 @@ export function selectExistingCandidate(
     ...draft,
     resolution: 'existing',
     ingredientId: candidate.id,
+    defaultUnit: candidate.default_unit,
     name: candidate.name,
-    unit: candidate.default_unit ?? 'none',
+    unit: draft.unit === 'none' ? (candidate.default_unit ?? 'none') : draft.unit,
   }
 }
 
@@ -151,6 +153,7 @@ export function selectNewCandidate(draft: IngredientReviewDraft): IngredientRevi
     ...draft,
     resolution: 'new',
     ingredientId: null,
+    defaultUnit: null,
   }
 }
 
@@ -163,8 +166,9 @@ export function associateExistingIngredient(
     sourceStatus: 'matched',
     resolution: 'existing',
     ingredientId: ingredient.id,
+    defaultUnit: ingredient.default_unit,
     name: ingredient.name,
-    unit: ingredient.default_unit ?? 'none',
+    unit: draft.unit === 'none' ? (ingredient.default_unit ?? 'none') : draft.unit,
   }
 }
 

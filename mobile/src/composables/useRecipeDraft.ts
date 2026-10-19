@@ -114,6 +114,17 @@ export function useRecipeDraft() {
       tagIds: existingRecipe.tags.map((tag) => tag.id),
     })
     reviewIngredients.value = mapRecipeIngredients(existingRecipe.ingredients)
+    for (const draft of reviewIngredients.value) {
+      void foodApi.searchIngredients(draft.name).then((response) => {
+        const ingredient = response.data.find((item) => item.id === draft.ingredientId)
+        const current = reviewIngredients.value.find((item) => item.key === draft.key)
+        if (ingredient && current?.ingredientId === ingredient.id && current.defaultUnit === undefined) {
+          current.defaultUnit = ingredient.default_unit
+        }
+      }).catch(() => {
+        // The recipe remains editable if the optional conversion lookup fails.
+      })
+    }
     imageFile.value = null
     existingImageUrl.value = existingRecipe.image_url
     imagePreviewUrl.value = existingRecipe.image_url
