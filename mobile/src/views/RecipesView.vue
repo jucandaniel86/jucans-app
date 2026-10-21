@@ -220,7 +220,7 @@ onBeforeUnmount(() => {
     <header class="recipes-page__header">
       <div>
         <p>Food</p>
-        <h1>Rețetele noastre <span aria-hidden="true">🍳</span></h1>
+        <h1>Rețetele noastre</h1>
       </div>
       <RouterLink
         class="recipes-page__add"
@@ -242,7 +242,11 @@ onBeforeUnmount(() => {
       />
     </label>
 
-    <div v-if="!advancedOpen && (selectedTags.length || selectedStructure || selectedAuthor)" class="recipes-page__filters recipes-page__active" aria-label="Filtre active">
+    <div
+      v-if="!advancedOpen && (selectedTags.length || selectedStructure || selectedAuthor)"
+      class="recipes-page__filters recipes-page__active"
+      aria-label="Filtre active"
+    >
       <button
         v-for="id in selectedTags"
         :key="`tag-${id}`"
@@ -250,12 +254,27 @@ onBeforeUnmount(() => {
         :aria-label="`Elimină filtrul ${tags.find((tag) => tag.id === id)?.name ?? `Tag #${id}`}`"
         @click="toggleTag(id)"
       >
-        {{ tags.find((tag) => tag.id === id)?.name ?? `Tag #${id}` }} <span aria-hidden="true">×</span>
+        {{ tags.find((tag) => tag.id === id)?.name ?? `Tag #${id}` }}
+        <span aria-hidden="true">×</span>
       </button>
-      <button v-if="selectedStructure" type="button" aria-label="Elimină filtrul de tip masă" @click="filterStructure(null)">
-        {{ dailyStructures.find((item) => item.id === selectedStructure)?.name ?? `Tip masă #${selectedStructure}` }} <span aria-hidden="true">×</span>
+      <button
+        v-if="selectedStructure"
+        type="button"
+        aria-label="Elimină filtrul de tip masă"
+        @click="filterStructure(null)"
+      >
+        {{
+          dailyStructures.find((item) => item.id === selectedStructure)?.name ??
+          `Tip masă #${selectedStructure}`
+        }}
+        <span aria-hidden="true">×</span>
       </button>
-      <button v-if="selectedAuthor" type="button" :aria-label="`Elimină filtrul ${authorName}`" @click="filterAuthor(null)">
+      <button
+        v-if="selectedAuthor"
+        type="button"
+        :aria-label="`Elimină filtrul ${authorName}`"
+        @click="filterAuthor(null)"
+      >
         {{ authorName }} <span aria-hidden="true">×</span>
       </button>
     </div>
@@ -292,7 +311,7 @@ onBeforeUnmount(() => {
           :aria-pressed="selectedTags.includes(tag.id)"
           @click="toggleTag(tag.id)"
         >
-          {{ tag.emoji }} {{ tag.name }}
+          {{ tag.name }}
         </button>
       </div>
       <button v-if="tagsError" type="button" class="recipes-page__reset" @click="loadTags">
@@ -301,11 +320,7 @@ onBeforeUnmount(() => {
 
       <h2>Tip masă</h2>
       <div class="recipes-page__filters" aria-label="Filtrează după tipul de masă">
-        <button
-          type="button"
-          :aria-pressed="!selectedStructure"
-          @click="filterStructure(null)"
-        >
+        <button type="button" :aria-pressed="!selectedStructure" @click="filterStructure(null)">
           Toate mesele
         </button>
         <button
@@ -329,7 +344,9 @@ onBeforeUnmount(() => {
 
       <h2>Autor</h2>
       <div class="recipes-page__filters" aria-label="Filtrează după autor">
-        <button type="button" :aria-pressed="!selectedAuthor" @click="filterAuthor(null)">Toți autorii</button>
+        <button type="button" :aria-pressed="!selectedAuthor" @click="filterAuthor(null)">
+          Toți autorii
+        </button>
         <button
           v-for="author in authors"
           :key="author.id"
@@ -340,7 +357,9 @@ onBeforeUnmount(() => {
           {{ author.name }}
         </button>
       </div>
-      <button v-if="authorsError" type="button" class="recipes-page__reset" @click="loadAuthors">Reîncarcă autorii</button>
+      <button v-if="authorsError" type="button" class="recipes-page__reset" @click="loadAuthors">
+        Reîncarcă autorii
+      </button>
     </div>
 
     <div v-if="loading" class="recipes-page__skeletons" aria-label="Se încarcă rețetele">
@@ -373,7 +392,7 @@ onBeforeUnmount(() => {
 
     <template v-else>
       <div class="recipes-page__list">
-        <RecipeCard v-for="recipe in recipes" :key="recipe.id" :recipe="recipe" />
+        <RecipeCard v-for="recipe in recipes" :key="recipe.id" :recipe="recipe" compact />
       </div>
 
       <p v-if="error" class="recipes-page__more-error" role="alert">{{ error }}</p>
@@ -395,7 +414,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: 8px;
 }
 
 .recipes-page__advanced-toggle {
@@ -403,25 +422,25 @@ onBeforeUnmount(() => {
   margin-left: auto;
   min-height: 36px;
   padding: 0 var(--space-3);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-pill);
-  color: var(--color-primary-strong);
-  background: var(--color-surface);
-  font-size: 0.82rem;
-  font-weight: 700;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  color: #222;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
 }
 
 .recipes-page__advanced {
   display: grid;
   min-width: 0;
-  gap: var(--space-2);
+  gap: 4px;
 }
 
 .recipes-page__advanced h2 {
-  margin: var(--space-2) 0 0;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #777;
 }
 
 .recipes-page__active {
@@ -434,47 +453,62 @@ onBeforeUnmount(() => {
 
 .recipes-page__filters {
   display: flex;
-  gap: var(--space-2);
+  gap: 6px;
   overflow-x: auto;
-  padding: 2px 0 4px;
+  padding: 2px 0;
 }
 .recipes-page__filters button {
   flex: 0 0 auto;
   min-height: 36px;
   padding: 0 12px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 18px;
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 0.82rem;
-  font-weight: 700;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  color: #171717;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
 }
 .recipes-page__filters button:nth-child(3n) {
-  background: #fce5ee;
+  background: #f5f5f5;
 }
 .recipes-page__filters button:nth-child(3n + 1) {
-  background: #e3f4ee;
+  background: #f5f5f5;
 }
 .recipes-page__filters button:nth-child(3n + 2) {
-  background: #fff0ce;
+  background: #f5f5f5;
 }
 .recipes-page__filters button[aria-pressed='true'] {
-  background: var(--color-primary-strong);
-  border-color: var(--color-primary-strong);
+  background: #222;
+  border-color: #222;
   color: #fff;
 }
 .recipes-page__reset {
   border: 0;
   padding: 8px 0;
-  color: var(--color-primary-strong);
+  color: #222;
   background: transparent;
   font-weight: 700;
   cursor: pointer;
 }
 .recipes-page {
+  isolation: isolate;
   display: grid;
-  gap: var(--space-5);
+  min-width: 0;
+  min-height: calc(100dvh - 140px);
+  align-content: start;
+  gap: 4px;
+  color: #171717;
+  background: #fff;
+}
+
+.recipes-page::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: #fff;
+  pointer-events: none;
+  content: '';
 }
 
 .recipes-page__header {
@@ -491,59 +525,61 @@ onBeforeUnmount(() => {
 
 .recipes-page__header p {
   margin-bottom: var(--space-1);
-  color: var(--color-primary-strong);
-  font-size: 0.76rem;
-  font-weight: 850;
+  color: #222;
+  font-size: 11px;
+  font-weight: 500;
   text-transform: uppercase;
 }
 
 .recipes-page__header h1 {
-  font-size: 1.75rem;
+  font-size: 20px;
+  font-weight: 600;
   line-height: 1.15;
   letter-spacing: 0;
 }
 
 .recipes-page__add {
   display: grid;
-  width: 48px;
-  height: 48px;
-  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
   place-items: center;
-  border-radius: 50%;
+  border-radius: 4px;
   color: #fff;
   font-size: 1.8rem;
   line-height: 1;
   text-decoration: none;
-  background: var(--color-pink);
-  box-shadow: var(--shadow-sm);
+  background: #222;
+  box-shadow: none;
 }
 
 .recipes-page__search {
   display: grid;
-  min-height: 50px;
-  padding: 0 var(--space-4);
-  border: 1.5px solid var(--color-border-strong);
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid #ddd;
   border-radius: 8px;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: var(--space-2);
-  background: var(--color-surface);
+  background: #fff;
 }
 
 .recipes-page__search > span:first-child {
-  color: var(--color-primary-strong);
+  color: #222;
   font-size: 1.4rem;
   font-weight: 800;
 }
 
 .recipes-page__search input {
   min-width: 0;
-  height: 48px;
+  height: 42px;
   padding: 0;
   border: 0;
-  color: var(--color-text);
+  color: #171717;
   background: transparent;
   outline: 0;
+  font-size: 14px;
 }
 
 .visually-hidden {
@@ -560,55 +596,51 @@ onBeforeUnmount(() => {
   margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;
-  color: var(--color-text-muted);
-  font-size: 0.86rem;
-  font-weight: 720;
+  color: #777;
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .recipes-page__list,
 .recipes-page__skeletons {
   display: grid;
-  gap: var(--space-3);
+  gap: 0;
 }
 
 .recipe-skeleton {
   display: grid;
-  padding: var(--space-3);
-  border-radius: 8px;
-  grid-template-columns: 112px minmax(0, 1fr);
-  gap: var(--space-4);
-  background: var(--color-surface);
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  height: 64px;
+  padding: 7px 0;
+  gap: 8px;
+  border-bottom: 1px solid #e9e9e9;
+  background: #fff;
 }
-
 .recipe-skeleton > span {
-  aspect-ratio: 1;
-  border-radius: 7px;
-  background: var(--color-border);
+  width: 48px;
+  height: 48px;
+  border-radius: 3px;
+  background: #eee;
 }
-
 .recipe-skeleton div {
   display: grid;
-  align-content: center;
-  gap: var(--space-3);
+  gap: 7px;
 }
-
 .recipe-skeleton div span {
-  height: 12px;
-  border-radius: var(--radius-pill);
-  background: var(--color-border);
+  height: 10px;
+  background: #eee;
 }
-
 .recipe-skeleton div span:nth-child(2) {
-  width: 70%;
+  width: 65%;
 }
-
 .recipe-skeleton div span:nth-child(3) {
-  width: 45%;
+  display: none;
 }
 
 .recipes-state {
   display: grid;
-  min-height: 260px;
+  min-height: 180px;
   place-content: center;
   justify-items: center;
   gap: var(--space-3);
@@ -626,7 +658,7 @@ onBeforeUnmount(() => {
 }
 
 .recipes-state p {
-  color: var(--color-text-muted);
+  color: #777;
 }
 
 .recipes-state__add {
@@ -637,13 +669,58 @@ onBeforeUnmount(() => {
   font-weight: 780;
   line-height: 46px;
   text-decoration: none;
-  background: var(--color-primary);
+  background: #222;
 }
 
 .recipes-page__more-error {
   margin: 0;
-  color: var(--color-error);
+  color: #555;
   font-size: 0.82rem;
   text-align: center;
+}
+
+.recipes-page__search:focus-within {
+  border-color: #555;
+}
+.recipes-page__search {
+  background: #fafafa;
+  border-radius: 4px;
+}
+.recipes-page__advanced-toggle {
+  min-height: 44px;
+  border: 0;
+  font-size: 12px;
+}
+.recipes-page__header p {
+  margin-bottom: 2px;
+}
+.recipes-page__add {
+  color: #222;
+  background: #f3f3f3;
+}
+.recipes-state h2 span {
+  filter: grayscale(1);
+}
+.recipes-state p {
+  font-size: 12px;
+}
+.recipes-page > :deep(.app-button),
+.recipes-state :deep(.app-button) {
+  min-height: 44px;
+  border-color: #ddd;
+  border-radius: 4px;
+  color: #333;
+  background: #fff;
+  box-shadow: none;
+  font-size: 13px;
+}
+.recipes-page :deep(.app-button__spinner) {
+  border-color: #ddd;
+  border-top-color: #555;
+}
+.recipes-page button:focus-visible,
+.recipes-page a:focus-visible {
+  outline: 2px solid #555;
+  outline-offset: 2px;
 }
 </style>

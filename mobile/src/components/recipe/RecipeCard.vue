@@ -5,6 +5,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import jucansPlaceholder from '@/assets/jucans_logo.png'
 import UserAvatar from '@/components/user/UserAvatar.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import PencilIcon from '@/components/icons/pencilIcon.vue'
 import { useAddRecipeToShoppingList } from '@/composables/useAddRecipeToShoppingList'
 import type { RecipeSummary } from '@/types/food'
 import { recipeSourceLabel } from '@/utils/recipePresentation'
@@ -13,6 +14,7 @@ import { useAuthStore } from '@/stores/auth'
 const props = defineProps<{
   recipe: RecipeSummary
   readonly?: boolean
+  compact?: boolean
 }>()
 
 const router = useRouter()
@@ -35,94 +37,227 @@ function editRecipe(): void {
 <template>
   <article
     class="recipe-card"
+    :class="{ 'recipe-card--compact': compact }"
     role="link"
     tabindex="0"
     :aria-label="`Deschide rețeta ${recipe.name}`"
     @click="openRecipe"
     @keydown.enter="openRecipe"
   >
-    <img
-      class="recipe-card__image"
-      :class="{ 'recipe-card__image--placeholder': !recipe.image_url }"
-      :src="recipe.image_url ?? jucansPlaceholder"
-      :alt="recipe.image_url ? `Imagine ${recipe.name}` : ''"
-    />
-
-    <div class="recipe-card__body">
-      <div class="recipe-card__heading">
-        <div class="recipe-card__title-row">
-          <h2>{{ recipe.name }}</h2>
-          <button
-            v-if="!readonly && authStore.user && authStore.user.is_admin"
-            type="button"
-            :aria-label="`Editează rețeta ${recipe.name}`"
-            @click.stop="editRecipe"
-          >
-            Editează
-          </button>
+    <template v-if="compact">
+      <img
+        class="recipe-row__image"
+        :class="{ 'recipe-row__image--placeholder': !recipe.image_url }"
+        :src="recipe.image_url ?? jucansPlaceholder"
+        :alt="recipe.image_url ? `Imagine ${recipe.name}` : ''"
+      />
+      <div class="recipe-row__content">
+        <h2 class="recipe-row__title" :title="recipe.name">{{ recipe.name }}</h2>
+        <div class="recipe-row__metadata" aria-label="Detaliile rețetei">
+          <span v-for="structure in recipe.daily_structures" :key="`meal-${structure.id}`">{{
+            structure.name
+          }}</span>
+          <span v-for="tag in visibleTags" :key="`tag-${tag.id}`">{{ tag.name }}</span>
+          <span v-if="remainingTags">+{{ remainingTags }}</span>
         </div>
-        <a
-          v-if="recipe.url"
-          :href="recipe.url"
-          target="_blank"
-          rel="noopener noreferrer"
+      </div>
+      <div class="recipe-row__bar" @click.stop @keydown.stop>
+        <RouterLink
+          v-if="recipe.author"
+          class="recipe-row__credit"
+          :to="{
+            name: 'recipes',
+            query: {
+              ...(route.name === 'recipes' ? route.query : {}),
+              author_id: String(recipe.author.id),
+            },
+          }"
+          :aria-label="`Vezi rețetele autorului ${recipe.author.name}`"
+          :title="`${recipe.author.name} · Adăugată de ${recipe.creator.username}`"
           @click.stop
+          @keydown.stop
         >
-          {{ recipeSourceLabel(recipe.url) }}
-        </a>
-        <div v-if="recipe.daily_structures?.length" class="recipe-card__meals" aria-label="Tipuri de masă">
-          <span v-for="structure in recipe.daily_structures" :key="structure.id">{{ structure.name }}</span>
-        </div>
-      </div>
-    </div>
-    <div v-if="recipe.tags.length" class="recipe-card__classification">
-      <div v-if="recipe.tags.length" class="recipe-card__tags" aria-label="Tag-uri">
-        <span v-for="tag in visibleTags" :key="tag.id">
-          {{ tag.emoji ? `${tag.emoji} ${tag.name}` : tag.name }}
-        </span>
-        <span v-if="remainingTags">+{{ remainingTags }}</span>
-      </div>
-    </div>
-    <div class="recipe-card__footer">
-      <div class="recipe-card__credits">
-        <div class="recipe-card__creator">
+          <img :src="recipe.author.icon_url ?? jucansPlaceholder" alt="" width="20" height="20" />
+          <span>{{ recipe.author.name }}</span>
+        </RouterLink>
+        <span v-else class="recipe-row__credit" :title="`Adăugată de ${recipe.creator.username}`">
           <UserAvatar
             :avatar="recipe.creator.avatar"
             :username="recipe.creator.username"
             size="small"
           />
-          <span :title="recipe.creator.username">{{ recipe.creator.username }}</span>
+          <span>{{ recipe.creator.username }}</span>
+        </span>
+        <div class="recipe-row__actions">
+          <button
+            v-if="!readonly && authStore.user && authStore.user.is_admin"
+            type="button"
+            :aria-label="`Editează rețeta ${recipe.name}`"
+            title="Editează rețeta"
+            @click.stop="editRecipe"
+            @keydown.stop
+          >
+            <PencilIcon />
+          </button>
+          <a
+            v-if="recipe.url"
+            class="recipe-row__source"
+            :href="recipe.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            :aria-label="`Deschide sursa: ${recipeSourceLabel(recipe.url)}`"
+            :title="recipeSourceLabel(recipe.url)"
+            @click.stop
+            @keydown.stop
+          >
+            <svg
+              v-if="recipeSourceLabel(recipe.url) === '▶ YouTube'"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              aria-hidden="true"
+            >
+              <rect x="2" y="5" width="20" height="14" rx="4" />
+              <path d="m10 9 5 3-5 3Z" fill="currentColor" stroke="none" />
+            </svg>
+            <svg
+              v-else
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <ellipse cx="12" cy="12" rx="4" ry="9" />
+              <path d="M3 12h18" />
+            </svg>
+          </a>
+          <AppButton
+            v-if="!readonly"
+            class="recipe-row__shopping"
+            variant="secondary"
+            :loading="adding"
+            :aria-label="`Adaugă ${recipe.name} la lista de cumpărături`"
+            title="Adaugă la lista de cumpărături"
+            @click.stop="addToList"
+            @keydown.stop
+          >
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 3h2l3 12h11l2-8H6" />
+              <circle cx="9" cy="20" r="1" />
+              <circle cx="18" cy="20" r="1" />
+            </svg>
+          </AppButton>
         </div>
-        <RouterLink
-          v-if="recipe.author"
-          class="recipe-card__author"
-          :to="{ name: 'recipes', query: { ...(route.name === 'recipes' ? route.query : {}), author_id: String(recipe.author.id) } }"
-          :aria-label="`Vezi rețetele autorului ${recipe.author.name}`"
-          @click.stop
+      </div>
+    </template>
+    <template v-else>
+      <img
+        class="recipe-card__image"
+        :class="{ 'recipe-card__image--placeholder': !recipe.image_url }"
+        :src="recipe.image_url ?? jucansPlaceholder"
+        :alt="recipe.image_url ? `Imagine ${recipe.name}` : ''"
+      />
+
+      <div class="recipe-card__body">
+        <div class="recipe-card__heading">
+          <div class="recipe-card__title-row">
+            <h2>{{ recipe.name }}</h2>
+            <button
+              v-if="!readonly && authStore.user && authStore.user.is_admin"
+              type="button"
+              :aria-label="`Editează rețeta ${recipe.name}`"
+              @click.stop="editRecipe"
+            >
+              Editează
+            </button>
+          </div>
+          <a
+            v-if="recipe.url"
+            :href="recipe.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            @click.stop
+          >
+            {{ recipeSourceLabel(recipe.url) }}
+          </a>
+          <div
+            v-if="recipe.daily_structures?.length"
+            class="recipe-card__meals"
+            aria-label="Tipuri de masă"
+          >
+            <span v-for="structure in recipe.daily_structures" :key="structure.id">{{
+              structure.name
+            }}</span>
+          </div>
+        </div>
+      </div>
+      <div v-if="recipe.tags.length" class="recipe-card__classification">
+        <div v-if="recipe.tags.length" class="recipe-card__tags" aria-label="Tag-uri">
+          <span v-for="tag in visibleTags" :key="tag.id">
+            {{ tag.emoji ? `${tag.emoji} ${tag.name}` : tag.name }}
+          </span>
+          <span v-if="remainingTags">+{{ remainingTags }}</span>
+        </div>
+      </div>
+      <div class="recipe-card__footer">
+        <div class="recipe-card__credits">
+          <div class="recipe-card__creator">
+            <UserAvatar
+              :avatar="recipe.creator.avatar"
+              :username="recipe.creator.username"
+              size="small"
+            />
+            <span :title="recipe.creator.username">{{ recipe.creator.username }}</span>
+          </div>
+          <RouterLink
+            v-if="recipe.author"
+            class="recipe-card__author"
+            :to="{
+              name: 'recipes',
+              query: {
+                ...(route.name === 'recipes' ? route.query : {}),
+                author_id: String(recipe.author.id),
+              },
+            }"
+            :aria-label="`Vezi rețetele autorului ${recipe.author.name}`"
+            @click.stop
+            @keydown.stop
+          >
+            <img :src="recipe.author.icon_url ?? jucansPlaceholder" alt="" width="24" height="24" />
+            <span>{{ recipe.author.name }}</span>
+          </RouterLink>
+        </div>
+        <AppButton
+          v-if="!readonly"
+          class="recipe-card__shopping-button"
+          variant="secondary"
+          :loading="adding"
+          :aria-label="`Adaugă ${recipe.name} la lista de cumpărături`"
+          title="Adaugă la lista de cumpărături"
+          @click.stop="addToList"
           @keydown.stop
         >
-          <img
-            :src="recipe.author.icon_url ?? jucansPlaceholder"
-            alt=""
-            width="24"
-            height="24"
-          />
-          <span>{{ recipe.author.name }}</span>
-        </RouterLink>
+          <span aria-hidden="true">🛒</span>
+        </AppButton>
       </div>
-      <AppButton
-        v-if="!readonly"
-        class="recipe-card__shopping-button"
-        variant="secondary"
-        :loading="adding"
-        :aria-label="`Adaugă ${recipe.name} la lista de cumpărături`"
-        title="Adaugă la lista de cumpărături"
-        @click.stop="addToList"
-        @keydown.stop
-      >
-        <span aria-hidden="true">🛒</span>
-      </AppButton>
-    </div>
+    </template>
   </article>
 </template>
 
@@ -348,5 +483,169 @@ function editRecipe(): void {
   .recipe-card__image {
     width: 92px;
   }
+}
+
+.recipe-card--compact {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  align-content: center;
+  height: auto;
+  padding: 6px 0;
+  column-gap: 8px;
+  row-gap: 4px;
+  border: 0;
+  border-bottom: 1px solid #e9e9e9;
+  border-radius: 0;
+  color: #171717;
+  background: #fff;
+  box-shadow: none;
+  transition: background-color 120ms;
+}
+
+.recipe-card--compact:hover {
+  background: #fafafa;
+}
+.recipe-card--compact:active {
+  transform: none;
+}
+.recipe-card--compact:focus-visible {
+  outline: 2px solid #555;
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+.recipe-row__image {
+  width: 48px;
+  height: 48px;
+  border-radius: 3px;
+  object-fit: cover;
+  background: #f3f3f3;
+}
+.recipe-row__image--placeholder {
+  padding: 4px;
+  object-fit: contain;
+}
+.recipe-row__content {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.recipe-row__title {
+  margin: 0;
+  overflow: hidden;
+  color: #171717;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 19px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recipe-row__metadata {
+  display: block;
+  min-width: 0;
+  height: 18px;
+  overflow: hidden;
+  color: #737373;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recipe-row__metadata > * {
+  vertical-align: middle;
+}
+.recipe-row__metadata > * + *::before {
+  margin: 0 5px;
+  color: #999;
+  content: '·';
+}
+.recipe-row__bar {
+  display: flex;
+  grid-column: 1 / -1;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.recipe-row__credit {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 36px;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border: 1px solid #e1e1e1;
+  border-radius: 999px;
+  color: #666;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.recipe-row__credit > span:not(.user-avatar) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recipe-row__credit img,
+.recipe-row__credit :deep(.user-avatar) {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  flex: 0 0 18px;
+  border-radius: 50%;
+  object-fit: cover;
+  font-size: 9px;
+}
+.recipe-row__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.recipe-row__actions > button,
+.recipe-row__actions > a {
+  display: inline-flex;
+  width: 36px;
+  min-height: 36px;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #e1e1e1;
+  border-radius: 999px;
+  color: #666;
+  background: #fff;
+  box-shadow: none;
+  text-decoration: none;
+}
+.recipe-row__actions :deep(svg) {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.5;
+}
+.recipe-row__actions > button:hover:not(:disabled),
+.recipe-row__actions > a:hover,
+a.recipe-row__credit:hover {
+  color: #111;
+  background: #f0f0f0;
+}
+.recipe-row__actions > button:focus-visible,
+.recipe-row__actions > a:focus-visible,
+.recipe-row__credit:focus-visible {
+  outline: 2px solid #555;
+  outline-offset: -2px;
+}
+.recipe-row__shopping :deep(.app-button__spinner) {
+  width: 16px;
+  height: 16px;
+  border-color: #ddd;
+  border-top-color: #555;
 }
 </style>
