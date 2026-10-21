@@ -22,6 +22,9 @@ const recipe: RecipeDraft = {
   description: '',
   url: '',
   tagIds: [2],
+  authorId: '',
+  consumptionDays: '1',
+  dailyStructureIds: [],
 }
 
 function resolverResult(

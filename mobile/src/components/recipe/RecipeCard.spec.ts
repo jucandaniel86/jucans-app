@@ -16,6 +16,8 @@ vi.mock('@/stores/activeShoppingList', () => ({
 
 vi.mock('vue-router', () => ({
   useRouter: () => routerMocks,
+  useRoute: () => ({ name: 'recipes', query: {} }),
+  RouterLink: { template: '<a><slot /></a>' },
 }))
 
 import RecipeCard from '@/components/recipe/RecipeCard.vue'
@@ -30,6 +32,10 @@ const recipe: RecipeSummary = {
   image: null,
   image_url: null,
   url: 'https://youtube.com/watch?v=test',
+  author: null,
+  author_id: null,
+  consumption_days: 1,
+  daily_structures: [],
   creator: { id: 1, username: 'daniel', avatar: null },
   tags: [
     { id: 1, name: 'Ciorbă', normalized_name: 'ciorba', emoji: '🍲' },

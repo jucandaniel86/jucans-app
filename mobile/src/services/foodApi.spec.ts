@@ -22,6 +22,9 @@ const payload: RecipeCreatePayload = {
   description: 'Rețeta familiei',
   url: null,
   tags: [2],
+  author_id: null,
+  consumption_days: 1,
+  daily_structures: [],
   ingredients: [
     {
       ingredient_id: 17,
