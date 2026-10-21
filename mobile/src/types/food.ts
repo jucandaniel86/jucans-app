@@ -1,3 +1,6 @@
+import type { Author } from '@/types/authors'
+import type { DailyStructureConfig } from '@/types/diets'
+
 export interface FoodTag {
   id: number
   name: string
@@ -190,6 +193,9 @@ export interface RecipeDraft {
   description: string
   url: string
   tagIds: number[]
+  authorId: string
+  consumptionDays: string
+  dailyStructureIds: number[]
 }
 
 export interface ExistingRecipeIngredientPayload {
@@ -214,6 +220,9 @@ export interface RecipeCreatePayload {
   description: string | null
   url: string | null
   tags: number[]
+  author_id: number | null
+  consumption_days: number
+  daily_structures: number[]
   ingredients: RecipeIngredientPayload[]
 }
 
@@ -247,8 +256,12 @@ export interface RecipeSummary {
   image: string | null
   image_url: string | null
   url: string | null
+  author: Author | null
   creator: RecipeCreator
   tags: FoodTag[]
+  author_id: number | null
+  consumption_days: number
+  daily_structures: DailyStructureConfig[]
   created_at: string | null
   updated_at: string | null
 }
@@ -260,6 +273,8 @@ export interface RecipeDetail extends RecipeSummary {
 export interface RecipeFilters {
   search?: string
   tags?: number[]
+  dailyStructure?: number
+  authorId?: number
   sort?: 'newest' | 'name'
   page?: number
   perPage?: number

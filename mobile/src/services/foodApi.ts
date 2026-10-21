@@ -31,6 +31,12 @@ function recipeFormData(payload: RecipeCreatePayload): FormData {
   formData.append('name', payload.name)
   formData.append('description', payload.description ?? '')
   formData.append('url', payload.url ?? '')
+  formData.append('author_id', payload.author_id === null ? '' : String(payload.author_id))
+  formData.append('consumption_days', String(payload.consumption_days))
+  formData.append('daily_structures_present', '1')
+  payload.daily_structures.forEach((id, index) =>
+    formData.append(`daily_structures[${index}]`, String(id)),
+  )
   formData.append('tags_present', '1')
   formData.append('ingredients_present', '1')
   payload.tags.forEach((tagId, index) => formData.append(`tags[${index}]`, String(tagId)))
@@ -48,6 +54,8 @@ function recipeListQuery(filters: RecipeFilters): string {
 
   if (filters.search?.trim()) parameters.set('search', filters.search.trim())
   if (filters.tags?.length) parameters.set('tags', filters.tags.join(','))
+  if (filters.authorId) parameters.set('author_id', String(filters.authorId))
+  if (filters.dailyStructure) parameters.set('daily_structure', String(filters.dailyStructure))
   if (filters.sort) parameters.set('sort', filters.sort)
   if (filters.page) parameters.set('page', String(filters.page))
   if (filters.perPage) parameters.set('per_page', String(filters.perPage))

@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import HomeView from '@/views/HomeView.vue'
 import LoginView from '@/views/LoginView.vue'
 import AddRecipeView from '@/views/AddRecipeView.vue'
+import AdminAuthorsView from '@/views/AdminAuthorsView.vue'
 import AdminIngredientsView from '@/views/AdminIngredientsView.vue'
 import AdminRecipeReviewsView from '@/views/AdminRecipeReviewsView.vue'
 import RecipeDetailView from '@/views/RecipeDetailView.vue'
@@ -83,6 +84,12 @@ const router = createRouter({
           path: 'recipes/:id',
           name: 'recipe-detail',
           component: RecipeDetailView,
+        },
+        {
+          path: 'admin/authors',
+          name: 'admin-authors',
+          component: AdminAuthorsView,
+          meta: { requiresAdmin: true, shoppingList: 'hidden' },
         },
         {
           path: 'admin/ingredients',

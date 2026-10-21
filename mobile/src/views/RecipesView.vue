@@ -4,13 +4,22 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import RecipeCard from '@/components/recipe/RecipeCard.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import { authorsApi } from '@/services/authorsApi'
+import type { Author } from '@/types/authors'
+import { dietsApi } from '@/services/dietsApi'
+import type { DailyStructureConfig } from '@/types/diets'
 import { foodApi } from '@/services/foodApi'
 import type { FoodTag, PaginationMeta, RecipeSummary } from '@/types/food'
 
 const route = useRoute()
 const router = useRouter()
 const tags = ref<FoodTag[]>([])
+const authors = ref<Author[]>([])
 const tagsError = ref(false)
+const authorsError = ref(false)
+const advancedOpen = ref(false)
+const dailyStructures = ref<DailyStructureConfig[]>([])
+const structuresError = ref(false)
 const recipes = ref<RecipeSummary[]>([])
 const pagination = ref<PaginationMeta | null>(null)
 const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
@@ -30,7 +39,22 @@ const selectedTags = computed(() => [
       .filter((id) => Number.isInteger(id) && id > 0),
   ),
 ])
-const hasFilters = computed(() => Boolean(searchTerm.value || selectedTags.value.length))
+const selectedStructure = computed(() => {
+  const id = Number(route.query.daily_structure)
+  return Number.isInteger(id) && id > 0 ? id : undefined
+})
+const selectedAuthor = computed(() => {
+  const id = Number(route.query.author_id)
+  return Number.isInteger(id) && id > 0 ? id : undefined
+})
+const authorName = computed(() =>
+  authors.value.find((author) => author.id === selectedAuthor.value)?.name ??
+  recipes.value.find((recipe) => recipe.author?.id === selectedAuthor.value)?.author?.name ??
+  `#${selectedAuthor.value}`,
+)
+const hasFilters = computed(() =>
+  Boolean(searchTerm.value || selectedTags.value.length || selectedStructure.value || selectedAuthor.value),
+)
 const total = computed(() => pagination.value?.total ?? 0)
 const canLoadMore = computed(() =>
   Boolean(pagination.value && pagination.value.current_page < pagination.value.last_page),
@@ -53,6 +77,8 @@ async function loadRecipes(page = 1, append = false): Promise<void> {
     const response = await foodApi.listRecipes({
       search: searchTerm.value || undefined,
       tags: selectedTags.value,
+      dailyStructure: selectedStructure.value,
+      authorId: selectedAuthor.value,
       page,
     })
 
@@ -76,13 +102,29 @@ async function loadRecipes(page = 1, append = false): Promise<void> {
   }
 }
 
-function updateFilters(query = searchTerm.value, ids = selectedTags.value): void {
-  if (query === (route.query.q ?? '') && ids.join(',') === (route.query.tags ?? '')) {
+function updateFilters(
+  query = searchTerm.value,
+  ids = selectedTags.value,
+  structure: number | null | undefined = selectedStructure.value,
+  author: number | null | undefined = selectedAuthor.value,
+): void {
+  if (
+    query === (route.query.q ?? '') &&
+    ids.join(',') === (route.query.tags ?? '') &&
+    String(structure ?? '') === (route.query.daily_structure ?? '') &&
+    String(author ?? '') === (route.query.author_id ?? '')
+  ) {
     void loadRecipes()
     return
   }
   void router.replace({
-    query: { ...route.query, q: query || undefined, tags: ids.length ? ids.join(',') : undefined },
+    query: {
+      ...route.query,
+      q: query || undefined,
+      tags: ids.length ? ids.join(',') : undefined,
+      daily_structure: structure ? String(structure) : undefined,
+      author_id: author ? String(author) : undefined,
+    },
   })
 }
 
@@ -99,7 +141,7 @@ function toggleTag(id: number): void {
 function resetFilters(): void {
   window.clearTimeout(debounceTimer)
   search.value = ''
-  updateFilters('', [])
+  updateFilters('', [], null, null)
 }
 
 watch(
@@ -115,7 +157,7 @@ watch(
 )
 
 watch(
-  () => [route.query.q, route.query.tags],
+  () => [route.query.q, route.query.tags, route.query.daily_structure, route.query.author_id],
   () => {
     window.clearTimeout(debounceTimer)
     syncingRoute = true
@@ -134,7 +176,39 @@ async function loadTags(): Promise<void> {
     tagsError.value = true
   }
 }
-onMounted(loadTags)
+async function loadStructures(): Promise<void> {
+  structuresError.value = false
+  try {
+    dailyStructures.value = (await dietsApi.getDailyStructureConfig()).data
+  } catch {
+    structuresError.value = true
+  }
+}
+
+function filterStructure(id: number | null): void {
+  window.clearTimeout(debounceTimer)
+  updateFilters(searchTerm.value, selectedTags.value, id)
+}
+
+function filterAuthor(id: number | null): void {
+  window.clearTimeout(debounceTimer)
+  updateFilters(searchTerm.value, selectedTags.value, selectedStructure.value, id)
+}
+
+async function loadAuthors(): Promise<void> {
+  authorsError.value = false
+  try {
+    authors.value = (await authorsApi.list()).data
+  } catch {
+    authorsError.value = true
+  }
+}
+
+onMounted(() => {
+  void loadAuthors()
+  void loadTags()
+  void loadStructures()
+})
 onBeforeUnmount(() => {
   window.clearTimeout(debounceTimer)
   requestSequence++
@@ -168,31 +242,106 @@ onBeforeUnmount(() => {
       />
     </label>
 
-    <div class="recipes-page__filters" aria-label="Filtrează după taguri">
+    <div v-if="!advancedOpen && (selectedTags.length || selectedStructure || selectedAuthor)" class="recipes-page__filters recipes-page__active" aria-label="Filtre active">
       <button
+        v-for="id in selectedTags"
+        :key="`tag-${id}`"
         type="button"
-        :aria-pressed="selectedTags.length === 0"
-        @click="updateFilters(searchTerm, [])"
+        :aria-label="`Elimină filtrul ${tags.find((tag) => tag.id === id)?.name ?? `Tag #${id}`}`"
+        @click="toggleTag(id)"
       >
-        Toate
+        {{ tags.find((tag) => tag.id === id)?.name ?? `Tag #${id}` }} <span aria-hidden="true">×</span>
       </button>
-      <button
-        v-for="tag in tags"
-        :key="tag.id"
-        type="button"
-        :aria-pressed="selectedTags.includes(tag.id)"
-        @click="toggleTag(tag.id)"
-      >
-        {{ tag.emoji }} {{ tag.name }}
+      <button v-if="selectedStructure" type="button" aria-label="Elimină filtrul de tip masă" @click="filterStructure(null)">
+        {{ dailyStructures.find((item) => item.id === selectedStructure)?.name ?? `Tip masă #${selectedStructure}` }} <span aria-hidden="true">×</span>
+      </button>
+      <button v-if="selectedAuthor" type="button" :aria-label="`Elimină filtrul ${authorName}`" @click="filterAuthor(null)">
+        {{ authorName }} <span aria-hidden="true">×</span>
       </button>
     </div>
-    <button v-if="tagsError" type="button" class="recipes-page__reset" @click="loadTags">
-      Reîncarcă tagurile
-    </button>
 
-    <p v-if="pagination && !loading" class="recipes-page__count" aria-live="polite">
-      {{ resultLabel }}
-    </p>
+    <div class="recipes-page__toolbar">
+      <p v-if="pagination && !loading" class="recipes-page__count" aria-live="polite">
+        {{ resultLabel }}
+      </p>
+
+      <button
+        type="button"
+        class="recipes-page__advanced-toggle"
+        :aria-expanded="advancedOpen"
+        aria-controls="recipe-advanced-filters"
+        @click="advancedOpen = !advancedOpen"
+      >
+        Filtrare avansată <span aria-hidden="true">{{ advancedOpen ? '⌃' : '⌄' }}</span>
+      </button>
+    </div>
+    <div v-show="advancedOpen" id="recipe-advanced-filters" class="recipes-page__advanced">
+      <h2>Tags</h2>
+      <div class="recipes-page__filters" aria-label="Filtrează după taguri">
+        <button
+          type="button"
+          :aria-pressed="selectedTags.length === 0"
+          @click="updateFilters(searchTerm, [])"
+        >
+          Toate
+        </button>
+        <button
+          v-for="tag in tags"
+          :key="tag.id"
+          type="button"
+          :aria-pressed="selectedTags.includes(tag.id)"
+          @click="toggleTag(tag.id)"
+        >
+          {{ tag.emoji }} {{ tag.name }}
+        </button>
+      </div>
+      <button v-if="tagsError" type="button" class="recipes-page__reset" @click="loadTags">
+        Reîncarcă tagurile
+      </button>
+
+      <h2>Tip masă</h2>
+      <div class="recipes-page__filters" aria-label="Filtrează după tipul de masă">
+        <button
+          type="button"
+          :aria-pressed="!selectedStructure"
+          @click="filterStructure(null)"
+        >
+          Toate mesele
+        </button>
+        <button
+          v-for="structure in dailyStructures"
+          :key="structure.id"
+          type="button"
+          :aria-pressed="selectedStructure === structure.id"
+          @click="filterStructure(selectedStructure === structure.id ? null : structure.id)"
+        >
+          {{ structure.name }}
+        </button>
+      </div>
+      <button
+        v-if="structuresError"
+        type="button"
+        class="recipes-page__reset"
+        @click="loadStructures"
+      >
+        Reîncarcă tipurile de masă
+      </button>
+
+      <h2>Autor</h2>
+      <div class="recipes-page__filters" aria-label="Filtrează după autor">
+        <button type="button" :aria-pressed="!selectedAuthor" @click="filterAuthor(null)">Toți autorii</button>
+        <button
+          v-for="author in authors"
+          :key="author.id"
+          type="button"
+          :aria-pressed="selectedAuthor === author.id"
+          @click="filterAuthor(selectedAuthor === author.id ? null : author.id)"
+        >
+          {{ author.name }}
+        </button>
+      </div>
+      <button v-if="authorsError" type="button" class="recipes-page__reset" @click="loadAuthors">Reîncarcă autorii</button>
+    </div>
 
     <div v-if="loading" class="recipes-page__skeletons" aria-label="Se încarcă rețetele">
       <div v-for="index in 3" :key="index" class="recipe-skeleton">
@@ -242,11 +391,51 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.recipes-page__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.recipes-page__advanced-toggle {
+  flex-shrink: 0;
+  margin-left: auto;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-primary-strong);
+  background: var(--color-surface);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.recipes-page__advanced {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.recipes-page__advanced h2 {
+  margin: var(--space-2) 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.recipes-page__active {
+  flex-wrap: wrap;
+}
+
+.recipes-page__active:empty {
+  display: none;
+}
+
 .recipes-page__filters {
   display: flex;
   gap: var(--space-2);
   overflow-x: auto;
-  margin-top: calc(var(--space-3) * -1);
   padding: 2px 0 4px;
 }
 .recipes-page__filters button {
@@ -368,7 +557,9 @@ onBeforeUnmount(() => {
 }
 
 .recipes-page__count {
-  margin: calc(var(--space-2) * -1) 0 0;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--color-text-muted);
   font-size: 0.86rem;
   font-weight: 720;

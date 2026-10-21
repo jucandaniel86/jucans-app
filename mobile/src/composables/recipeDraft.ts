@@ -19,6 +19,7 @@ export interface RecipeDraftValidation {
   valid: boolean
   name: string
   url: string
+  consumptionDays: string
   ingredients: Record<string, IngredientDraftError>
 }
 
@@ -200,6 +201,7 @@ export function validateRecipeDraft(
     valid: true,
     name: '',
     url: '',
+    consumptionDays: '',
     ingredients: {},
   }
 
@@ -209,6 +211,11 @@ export function validateRecipeDraft(
 
   if (!isHttpUrl(recipe.url)) {
     errors.url = 'Folosește un link HTTP sau HTTPS valid.'
+  }
+
+  const days = Number(recipe.consumptionDays)
+  if (!Number.isInteger(days) || days < 1 || days > 2147483647) {
+    errors.consumptionDays = 'Introdu un număr întreg de zile, de cel puțin 1.'
   }
 
   for (const ingredient of ingredients) {
@@ -240,7 +247,11 @@ export function validateRecipeDraft(
     }
   }
 
-  errors.valid = !errors.name && !errors.url && Object.keys(errors.ingredients).length === 0
+  errors.valid =
+    !errors.name &&
+    !errors.url &&
+    !errors.consumptionDays &&
+    Object.keys(errors.ingredients).length === 0
   return errors
 }
 
@@ -253,6 +264,9 @@ export function buildRecipePayload(
     description: recipe.description.trim() || null,
     url: recipe.url.trim() || null,
     tags: recipe.tagIds,
+    author_id: recipe.authorId ? Number(recipe.authorId) : null,
+    consumption_days: Number(recipe.consumptionDays),
+    daily_structures: recipe.dailyStructureIds,
     ingredients: ingredients.map((ingredient) => {
       if (ingredient.resolution === 'pending') {
         throw new Error('Candidate ingredient must be resolved before saving.')

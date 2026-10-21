@@ -5,6 +5,7 @@ export type MenuRouteName =
   | 'shopping-list'
   | 'shopping-lists'
   | 'diets-lists'
+  | 'admin-authors'
   | 'admin-ingredients'
   | 'admin-recipe-reviews'
 
@@ -103,6 +104,14 @@ export const MENU_SECTIONS: MenuSection[] = [
     label: 'Administration',
     dividerBefore: true,
     items: [
+      {
+        id: 'admin-authors',
+        label: 'Authors',
+        routeName: 'admin-authors',
+        markerClass: 'drawer-link__mark--pink',
+        restricted: true,
+        soon: false,
+      },
       {
         id: 'admin-ingredients',
         label: 'Ingrediente',

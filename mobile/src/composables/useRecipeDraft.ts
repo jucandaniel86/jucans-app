@@ -13,6 +13,10 @@ import {
   type IngredientDraftError,
 } from '@/composables/recipeDraft'
 import { ApiError } from '@/services/api'
+import { authorsApi } from '@/services/authorsApi'
+import type { Author } from '@/types/authors'
+import { dietsApi } from '@/services/dietsApi'
+import type { DailyStructureConfig } from '@/types/diets'
 import { foodApi } from '@/services/foodApi'
 import { useNotificationStore } from '@/stores/notifications'
 import { actionErrorMessage } from '@/utils/actionError'
@@ -45,6 +49,9 @@ export function useRecipeDraft() {
     description: '',
     url: '',
     tagIds: [],
+    authorId: '',
+    consumptionDays: '1',
+    dailyStructureIds: [],
   })
   const imageFile = ref<File | null>(null)
   const imagePreviewUrl = ref<string | null>(null)
@@ -53,6 +60,8 @@ export function useRecipeDraft() {
   const rawIngredients = ref('')
   const reviewIngredients = ref<IngredientReviewDraft[]>([])
   const tags = ref<FoodTag[]>([])
+  const authors = ref<Author[]>([])
+  const dailyStructures = ref<DailyStructureConfig[]>([])
   const units = ref<Record<string, FoodUnit>>({})
   const loadingOptions = ref(true)
   const processingIngredients = ref(false)
@@ -112,6 +121,9 @@ export function useRecipeDraft() {
       description: existingRecipe.description ?? '',
       url: existingRecipe.url ?? '',
       tagIds: existingRecipe.tags.map((tag) => tag.id),
+      authorId: existingRecipe.author_id ? String(existingRecipe.author_id) : '',
+      consumptionDays: String(existingRecipe.consumption_days ?? 1),
+      dailyStructureIds: (existingRecipe.daily_structures ?? []).map((item) => item.id),
     })
     reviewIngredients.value = mapRecipeIngredients(existingRecipe.ingredients)
     for (const draft of reviewIngredients.value) {
@@ -150,13 +162,20 @@ export function useRecipeDraft() {
     optionsError.value = ''
 
     try {
-      const [config, tagResponse] = await Promise.all([foodApi.getConfig(), foodApi.listTags()])
+      const [config, tagResponse, structuresResponse, authorsResponse] = await Promise.all([
+        foodApi.getConfig(),
+        foodApi.listTags(),
+        dietsApi.getDailyStructureConfig(),
+        authorsApi.list(),
+      ])
       units.value = config.units
       tags.value = tagResponse.data
+      dailyStructures.value = structuresResponse.data
+      authors.value = authorsResponse.data
     } catch (error) {
       optionsError.value = friendlyRequestError(
         error,
-        'Nu am putut încărca tag-urile și unitățile. Încearcă din nou.',
+        'Nu am putut încărca tag-urile, unitățile, tipurile de masă și autorii. Încearcă din nou.',
       )
     } finally {
       loadingOptions.value = false
@@ -369,6 +388,9 @@ export function useRecipeDraft() {
       description: '',
       url: '',
       tagIds: [],
+      authorId: '',
+      consumptionDays: '1',
+      dailyStructureIds: [],
     })
     revokeImagePreview()
     imageFile.value = null
@@ -396,6 +418,8 @@ export function useRecipeDraft() {
     rawIngredients,
     reviewIngredients,
     tags,
+    dailyStructures,
+    authors,
     units,
     unitOptions,
     loadingOptions,

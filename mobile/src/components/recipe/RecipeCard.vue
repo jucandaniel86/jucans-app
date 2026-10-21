@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import jucansPlaceholder from '@/assets/jucans_logo.png'
 import UserAvatar from '@/components/user/UserAvatar.vue'
@@ -16,8 +16,10 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
+const route = useRoute()
 const visibleTags = computed(() => props.recipe.tags.slice(0, 3))
 const remainingTags = computed(() => Math.max(0, props.recipe.tags.length - 3))
+
 const authStore = useAuthStore()
 const { adding, addToList } = useAddRecipeToShoppingList(() => props.recipe.id)
 
@@ -68,8 +70,12 @@ function editRecipe(): void {
         >
           {{ recipeSourceLabel(recipe.url) }}
         </a>
+        <div v-if="recipe.daily_structures?.length" class="recipe-card__meals" aria-label="Tipuri de masă">
+          <span v-for="structure in recipe.daily_structures" :key="structure.id">{{ structure.name }}</span>
+        </div>
       </div>
-
+    </div>
+    <div v-if="recipe.tags.length" class="recipe-card__classification">
       <div v-if="recipe.tags.length" class="recipe-card__tags" aria-label="Tag-uri">
         <span v-for="tag in visibleTags" :key="tag.id">
           {{ tag.emoji ? `${tag.emoji} ${tag.name}` : tag.name }}
@@ -78,13 +84,31 @@ function editRecipe(): void {
       </div>
     </div>
     <div class="recipe-card__footer">
-      <div class="recipe-card__creator">
-        <UserAvatar
-          :avatar="recipe.creator.avatar"
-          :username="recipe.creator.username"
-          size="small"
-        />
-        <span>{{ recipe.creator.username }}</span>
+      <div class="recipe-card__credits">
+        <div class="recipe-card__creator">
+          <UserAvatar
+            :avatar="recipe.creator.avatar"
+            :username="recipe.creator.username"
+            size="small"
+          />
+          <span :title="recipe.creator.username">{{ recipe.creator.username }}</span>
+        </div>
+        <RouterLink
+          v-if="recipe.author"
+          class="recipe-card__author"
+          :to="{ name: 'recipes', query: { ...(route.name === 'recipes' ? route.query : {}), author_id: String(recipe.author.id) } }"
+          :aria-label="`Vezi rețetele autorului ${recipe.author.name}`"
+          @click.stop
+          @keydown.stop
+        >
+          <img
+            :src="recipe.author.icon_url ?? jucansPlaceholder"
+            alt=""
+            width="24"
+            height="24"
+          />
+          <span>{{ recipe.author.name }}</span>
+        </RouterLink>
       </div>
       <AppButton
         v-if="!readonly"
@@ -110,7 +134,10 @@ function editRecipe(): void {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   grid-template-columns: 112px minmax(0, 1fr);
-  gap: var(--space-4);
+  align-self: start;
+  align-content: start;
+  column-gap: var(--space-4);
+  row-gap: var(--space-2);
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
@@ -195,6 +222,21 @@ function editRecipe(): void {
   text-decoration: none;
 }
 
+.recipe-card__classification {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: var(--space-2);
+}
+
+.recipe-card__meals {
+  margin-top: var(--space-1);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+
 .recipe-card__tags {
   display: flex;
   flex-wrap: wrap;
@@ -212,6 +254,46 @@ function editRecipe(): void {
   text-overflow: ellipsis;
   white-space: nowrap;
   background: var(--color-yellow-soft);
+}
+
+.recipe-card__credits {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.recipe-card__author {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+  color: var(--color-primary-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+  margin-left: auto;
+}
+
+.recipe-card__author img {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.recipe-card__author span {
+  overflow-wrap: anywhere;
+}
+
+.recipe-card__author:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
 }
 
 .recipe-card__creator {
@@ -239,7 +321,6 @@ function editRecipe(): void {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  margin-top: auto;
   grid-column: span 2;
 }
 

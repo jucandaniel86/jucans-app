@@ -8,6 +8,7 @@ import IngredientReviewList from '@/components/recipe/IngredientReviewList.vue'
 import RecipeImageInput from '@/components/recipe/RecipeImageInput.vue'
 import RecipeTagSelector from '@/components/recipe/RecipeTagSelector.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import AppInput from '@/components/ui/AppInput.vue'
 import AppTextarea from '@/components/ui/AppTextarea.vue'
 import { validateRecipeDraft } from '@/composables/recipeDraft'
@@ -58,13 +59,14 @@ const visibleIngredientErrors = computed(() => ({
   ...draft.ingredientErrors.value,
 }))
 const saveBlockers = computed(() => {
-  if (draft.loadingOptions.value) return ['Se încarcă unitățile și tag-urile.']
+  if (draft.loadingOptions.value) return ['Se încarcă unitățile, tag-urile și tipurile de masă.']
   if (Object.keys(draft.units.value).length === 0)
     return ['Unitățile nu sunt disponibile. Încearcă din nou încărcarea lor.']
 
   return [
     validation.value.name,
     validation.value.url,
+    validation.value.consumptionDays,
     draft.imageError.value,
     ...draft.reviewIngredients.value.flatMap((ingredient) =>
       Object.entries(validation.value.ingredients[ingredient.key] ?? {}).map(
@@ -245,6 +247,15 @@ async function saveRecipe(): Promise<void> {
           :error="draft.nameError.value"
           @update:model-value="draft.nameError.value = ''"
         />
+        <AppSelect
+          v-model="draft.recipe.authorId"
+          label="Autor (opțional)"
+          :options="[
+            { value: '', label: 'Fără autor' },
+            ...draft.authors.value.map((author) => ({ value: String(author.id), label: author.name })),
+          ]"
+          :disabled="draft.loadingOptions.value || draft.saving.value"
+        />
         <AppTextarea
           v-model="draft.recipe.description"
           label="Descriere"
@@ -261,6 +272,38 @@ async function saveRecipe(): Promise<void> {
           :error="draft.urlError.value"
           @update:model-value="draft.urlError.value = ''"
         />
+        <div class="consumption-days">
+          <label for="recipe-consumption-days">Pentru câte zile?</label>
+          <input
+            id="recipe-consumption-days"
+            v-model="draft.recipe.consumptionDays"
+            type="number"
+            min="1"
+            max="2147483647"
+            step="1"
+            inputmode="numeric"
+            :disabled="draft.saving.value"
+            :aria-invalid="Boolean(validation.consumptionDays)"
+            :aria-describedby="validation.consumptionDays ? 'consumption-days-error' : undefined"
+          />
+          <p v-if="validation.consumptionDays" id="consumption-days-error" role="alert">
+            {{ validation.consumptionDays }}
+          </p>
+        </div>
+        <fieldset class="meal-types" :disabled="draft.loadingOptions.value || draft.saving.value">
+          <legend>Tipuri de masă</legend>
+          <p v-if="draft.loadingOptions.value">Se încarcă tipurile de masă…</p>
+          <div v-else class="meal-types__options">
+            <label v-for="structure in draft.dailyStructures.value" :key="structure.id">
+              <input
+                v-model="draft.recipe.dailyStructureIds"
+                type="checkbox"
+                :value="structure.id"
+              />
+              {{ structure.name }}
+            </label>
+          </div>
+        </fieldset>
         <RecipeImageInput
           :preview-url="draft.imagePreviewUrl.value"
           :has-image="draft.hasImage.value"
@@ -388,6 +431,71 @@ async function saveRecipe(): Promise<void> {
 </template>
 
 <style scoped>
+.consumption-days {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+.consumption-days label,
+.meal-types legend {
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-weight: 720;
+}
+
+.consumption-days input {
+  width: 110px;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.consumption-days p {
+  margin: 0;
+  color: var(--color-error);
+  font-size: 0.82rem;
+}
+
+.meal-types {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.meal-types__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.meal-types__options label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 42px;
+  padding: 0 var(--space-3);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.meal-types__options label:has(input:checked) {
+  border-color: var(--color-primary);
+  color: var(--color-primary-strong);
+  background: var(--color-primary-soft);
+}
+
+.meal-types input {
+  accent-color: var(--color-primary);
+}
+
 .add-recipe {
   display: grid;
   gap: var(--space-8);
