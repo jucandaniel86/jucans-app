@@ -14,7 +14,23 @@ class Recipe extends Model
         'description',
         'image',
         'url',
+        'consumption_days',
+        'author_id',
     ];
+
+    protected $attributes = ['consumption_days' => 1];
+
+    protected $casts = ['consumption_days' => 'integer'];
+
+    public function dailyStructures(): BelongsToMany
+    {
+        return $this->belongsToMany(DailyStructure::class, 'recipe_daily_structure')->withTimestamps();
+    }
+
+    public function author(): BelongsTo
+    {
+        return $this->belongsTo(Author::class);
+    }
 
     public function creator(): BelongsTo
     {

@@ -32,11 +32,9 @@
         'ingredients' => DietIngredientResource::collection(
           $this->whenLoaded('ingredients')
         ),
-        //
-        // 'recipes' => DietRecipeResource::collection(
-        //     $this->whenLoaded('recipes')
-        // ),
-        //
+        'recipes' => DietRecipeResource::collection(
+          $this->whenLoaded('recipes')
+        ),
         'daily_structure' => DietDailyStructureResource::collection(
           $this->whenLoaded('dailyStructure')
         ),

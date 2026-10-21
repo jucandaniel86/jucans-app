@@ -43,6 +43,13 @@
         ->orderBy('position');
     }
 
+    public function recipes(): BelongsToMany
+    {
+      return $this->belongsToMany(Recipe::class, 'diet_recipes')
+        ->withPivot(['id', 'priority', 'notes'])
+        ->withTimestamps();
+    }
+
     public function ingredients(): BelongsToMany
     {
       return $this->belongsToMany(Ingredient::class, 'diet_ingredients')

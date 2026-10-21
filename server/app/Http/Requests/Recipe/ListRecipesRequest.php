@@ -18,6 +18,8 @@ class ListRecipesRequest extends FormRequest
             'search' => ['nullable', 'string', 'max:255'],
             'tags' => ['nullable', 'array'],
             'tags.*' => ['integer', 'distinct', 'exists:food_tags,id'],
+            'author_id' => ['nullable', 'integer', 'exists:authors,id'],
+            'daily_structure' => ['nullable', 'integer', 'exists:daily_structures,id'],
             'sort' => ['nullable', Rule::in(['newest', 'name'])],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:50'],
             'random' => ['nullable', 'boolean'],

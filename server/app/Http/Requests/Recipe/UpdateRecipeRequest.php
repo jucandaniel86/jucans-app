@@ -12,6 +12,7 @@ class UpdateRecipeRequest extends StoreRecipeRequest
         $rules['image'] = ['sometimes', ...$rules['image']];
         $rules['remove_image'] = ['sometimes', 'boolean'];
         $rules['url'] = ['sometimes', 'nullable', 'url', 'max:2048'];
+        $rules['daily_structures_present'] = ['sometimes', 'boolean'];
         $rules['tags_present'] = ['sometimes', 'boolean'];
         $rules['ingredients_present'] = ['sometimes', 'boolean'];
 

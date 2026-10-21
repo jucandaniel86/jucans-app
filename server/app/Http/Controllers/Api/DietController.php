@@ -3,6 +3,10 @@
   namespace App\Http\Controllers\Api;
 
   use App\Enums\DietIngredientStatus;
+  use App\Enums\DietRecipePriority;
+  use App\Http\Requests\Diet\AddDietRecipeRequest;
+  use App\Http\Requests\Diet\UpdateDietRecipeRequest;
+  use App\Http\Resources\DietRecipeResource;
   use App\Http\Controllers\Controller;
   use App\Http\Requests\Diet\AddDailyStructureRequest;
   use App\Http\Requests\Diet\AddDietIngredientRequest;
@@ -24,6 +28,17 @@
 
   class DietController extends Controller
   {
+    public function index(): AnonymousResourceCollection
+    {
+      return DietResource::collection(
+        Diet::query()
+          ->with('creator')
+          ->latest()
+          ->orderByDesc('id')
+          ->get()
+      );
+    }
+
     /**
      * @url POST /api/diets
      * @param DietDraftRequest $request
@@ -73,6 +88,7 @@
       return $diet->load([
         'creator',
         'ingredients',
+        'recipes' => fn($q) => $q->with(['creator', 'tags', 'dailyStructures'])->orderBy('recipes.name')->orderBy('recipes.id'),
         'sources' => fn($q) => $q->orderBy('id', 'desc'),
         'dailyStructure' => fn($q) => $q->with('structure'),
       ]);
@@ -306,4 +322,47 @@
 
       return $this->dietIngredientsResponse($diet);
     }
+
+    private function dietRecipesResponse(Diet $diet): AnonymousResourceCollection
+    {
+      return DietRecipeResource::collection(
+        $diet->recipes()
+          ->with(['creator', 'tags', 'dailyStructures'])
+          ->orderBy('recipes.name')
+          ->orderBy('recipes.id')
+          ->get()
+      );
+    }
+
+    public function addDietRecipe(AddDietRecipeRequest $request, Diet $diet): AnonymousResourceCollection
+    {
+      $validated = $request->validated();
+      $recipeId = $validated['recipe_id'];
+
+      // Retrying an association must preserve the existing pivot values.
+      if (! $diet->recipes()->whereKey($recipeId)->exists()) {
+        $diet->recipes()->syncWithoutDetaching([
+          $recipeId => ['priority' => $validated['priority'] ?? DietRecipePriority::NORMAL->value],
+        ]);
+      }
+
+      return $this->dietRecipesResponse($diet);
+    }
+
+    public function updateDietRecipe(UpdateDietRecipeRequest $request, Diet $diet, int $recipeId): AnonymousResourceCollection
+    {
+      $diet->recipes()->whereKey($recipeId)->firstOrFail();
+      $diet->recipes()->updateExistingPivot($recipeId, $request->validated());
+
+      return $this->dietRecipesResponse($diet);
+    }
+
+    public function deleteDietRecipe(Diet $diet, int $recipeId): AnonymousResourceCollection
+    {
+      $diet->recipes()->whereKey($recipeId)->firstOrFail();
+      $diet->recipes()->detach($recipeId);
+
+      return $this->dietRecipesResponse($diet);
+    }
+
   }

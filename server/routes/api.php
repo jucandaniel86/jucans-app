@@ -1,5 +1,6 @@
 <?php
 
+  use App\Http\Controllers\Api\Admin\AuthorController;
   use App\Http\Controllers\Api\Admin\AdminIngredientController;
   use App\Http\Controllers\Api\Admin\RecipeIngredientReviewController;
   use App\Http\Controllers\Api\Admin\ShoppingCategoryController;
@@ -30,6 +31,7 @@
     Route::post('/ingredients/resolve', IngredientResolverController::class);
     Route::get('/ingredients/search', [IngredientController::class, 'search']);
     Route::post('/ingredients/aliases', [IngredientAliasController::class, 'store']);
+    Route::get('/authors', [AuthorController::class, 'index']);
     Route::apiResource('recipes', RecipeController::class);
     Route::get('/shopping-lists/active', [ShoppingListController::class, 'active']);
     Route::get('/shopping-lists/open', [ShoppingListController::class, 'open']);
@@ -54,6 +56,7 @@
     Route::delete('/shopping-lists/{shoppingList}/users/{user}', [ShoppingListSharingController::class, 'destroy']);
 
     Route::prefix('diets')->group(function () {
+      Route::get('/', [DietController::class, 'index']);
       Route::post('/', [DietController::class, 'store']);
 
       #daily structure
@@ -70,6 +73,11 @@
       Route::patch('/{diet}/sources/{sourceId}', [DietController::class, 'updateDietSource']);
       Route::delete('/{diet}/sources/{sourceId}', [DietController::class, 'deleteDietSource']);
 
+      #recipes
+      Route::post('/{diet}/recipes', [DietController::class, 'addDietRecipe']);
+      Route::patch('/{diet}/recipes/{recipeId}', [DietController::class, 'updateDietRecipe']);
+      Route::delete('/{diet}/recipes/{recipeId}', [DietController::class, 'deleteDietRecipe']);
+
       #ingredients
       Route::post('/{diet}/ingredients', [DietController::class, 'addDietIngredient',]);
       Route::patch('/{diet}/ingredients/{ingredientId}', [DietController::class, 'updateDietIngredient',]);
@@ -77,6 +85,7 @@
     });
 
     Route::prefix('admin')->middleware('admin')->group(function () {
+      Route::apiResource('authors', AuthorController::class);
       Route::get('/ingredients', [AdminIngredientController::class, 'index']);
       Route::patch('/ingredients/{ingredient}', [AdminIngredientController::class, 'update']);
       Route::post('/ingredients/{source}/merge-preview', [AdminIngredientController::class, 'mergePreview']);

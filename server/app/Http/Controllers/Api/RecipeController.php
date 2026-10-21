@@ -24,7 +24,7 @@ class RecipeController extends Controller
     public function index(ListRecipesRequest $request): AnonymousResourceCollection|RecipeResource|JsonResponse
     {
         $filters = $request->validated();
-        $query = Recipe::query()->with(['creator', 'tags']);
+        $query = Recipe::query()->with(['creator', 'author', 'tags', 'dailyStructures']);
 
         if (isset($filters['search'])) {
             $search = $filters['search'];
@@ -44,6 +44,14 @@ class RecipeController extends Controller
 
         foreach ($filters['tags'] ?? [] as $tagId) {
             $query->whereHas('tags', fn ($query) => $query->whereKey($tagId));
+        }
+
+        if (isset($filters['author_id'])) {
+            $query->where('author_id', $filters['author_id']);
+        }
+
+        if (isset($filters['daily_structure'])) {
+            $query->whereHas('dailyStructures', fn ($query) => $query->whereKey($filters['daily_structure']));
         }
 
         if ($filters['random']) {
@@ -82,10 +90,11 @@ class RecipeController extends Controller
 
         try {
             $recipe = DB::transaction(function () use ($request, $validated, $imagePath): Recipe {
-                $attributes = Arr::only($validated, ['name', 'description', 'url']);
+                $attributes = Arr::only($validated, ['name', 'description', 'url', 'consumption_days', 'author_id']);
                 $attributes['image'] = $imagePath;
                 $recipe = $request->user()->recipes()->create($attributes);
 
+                $recipe->dailyStructures()->sync($validated['daily_structures'] ?? []);
                 $recipe->tags()->sync($validated['tags'] ?? []);
                 $recipe->recipeIngredients()->createMany(
                     $this->prepareIngredients($validated['ingredients'] ?? [])
@@ -121,7 +130,7 @@ class RecipeController extends Controller
 
         try {
             DB::transaction(function () use ($recipe, $validated, $newImagePath, $removeImage): void {
-                $attributes = Arr::only($validated, ['name', 'description', 'url']);
+                $attributes = Arr::only($validated, ['name', 'description', 'url', 'consumption_days', 'author_id']);
 
                 if ($newImagePath !== null) {
                     $attributes['image'] = $newImagePath;
@@ -130,6 +139,10 @@ class RecipeController extends Controller
                 }
 
                 $recipe->update($attributes);
+
+                if (array_key_exists('daily_structures', $validated) || ($validated['daily_structures_present'] ?? false)) {
+                    $recipe->dailyStructures()->sync($validated['daily_structures'] ?? []);
+                }
 
                 if (array_key_exists('tags', $validated) || ($validated['tags_present'] ?? false)) {
                     $recipe->tags()->sync($validated['tags'] ?? []);
@@ -165,7 +178,7 @@ class RecipeController extends Controller
 
     private function loadRecipe(Recipe $recipe): Recipe
     {
-        return $recipe->load(['creator', 'tags', 'recipeIngredients.ingredient']);
+        return $recipe->load(['creator', 'author', 'tags', 'dailyStructures', 'recipeIngredients.ingredient']);
     }
 
     /**

@@ -13,7 +13,7 @@ class RecipeImageStorage
 
     private const DISK = 'recipe_images';
 
-    public function store(UploadedFile $file): string
+    public function store(UploadedFile $file, string $directory = 'recipes'): string
     {
         $contents = file_get_contents($file->getRealPath());
         $source = $contents === false ? false : @imagecreatefromstring($contents);
@@ -79,7 +79,7 @@ class RecipeImageStorage
             ]);
         }
 
-        $path = 'recipes/'.Str::uuid().'.webp';
+        $path = $directory.'/'.Str::uuid().'.webp';
 
         if (! Storage::disk(self::DISK)->put($path, $webp)) {
             throw ValidationException::withMessages([
@@ -90,9 +90,9 @@ class RecipeImageStorage
         return $path;
     }
 
-    public function deleteOwned(?string $path): void
+    public function deleteOwned(?string $path, string $directory = 'recipes'): void
     {
-        if ($path === null || $path !== 'recipes/'.basename($path)) {
+        if ($path === null || $path !== $directory.'/'.basename($path)) {
             return;
         }
 
