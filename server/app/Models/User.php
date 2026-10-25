@@ -34,6 +34,21 @@ class User extends Authenticatable
         return $this->hasMany(Recipe::class, 'created_by');
     }
 
+    public function ownedProjects(): HasMany
+    {
+        return $this->hasMany(Project::class, 'created_by');
+    }
+
+    public function projectMemberships(): HasMany
+    {
+        return $this->hasMany(ProjectCollaborator::class);
+    }
+
+    public function createdProjectTasks(): HasMany
+    {
+        return $this->hasMany(ProjectTask::class, 'created_by');
+    }
+
     public function createdShoppingLists(): HasMany
     {
         return $this->hasMany(ShoppingList::class, 'created_by');

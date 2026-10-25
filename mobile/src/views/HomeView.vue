@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 
 import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
+import HomeDailyTasksWidget from '@/components/projects/HomeDailyTasksWidget.vue'
 import { foodApi } from '@/services/foodApi'
 import { useAuthStore } from '@/stores/auth'
 import type { FoodTag } from '@/types/food'
@@ -135,6 +136,8 @@ onBeforeUnmount(() => {
     <header class="home-view__welcome">
       <p>Bună, {{ displayName }}! <span aria-hidden="true">👋</span></p>
     </header>
+
+    <HomeDailyTasksWidget />
 
     <AppCard class="food-card">
       <header class="food-card__header">

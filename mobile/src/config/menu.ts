@@ -8,6 +8,8 @@ export type MenuRouteName =
   | 'admin-authors'
   | 'admin-ingredients'
   | 'admin-recipe-reviews'
+  | 'meditation'
+  | 'projects'
 
 export type MenuMarkerClass =
   'drawer-link__mark--turquoise' | 'drawer-link__mark--pink' | 'drawer-link__mark--yellow'
@@ -18,6 +20,7 @@ export interface MenuItem {
   routeName: MenuRouteName | null
   markerClass: MenuMarkerClass
   restricted: boolean
+  hideWhenRestricted?: boolean
   soon: boolean
 }
 
@@ -38,6 +41,14 @@ export const MENU_SECTIONS: MenuSection[] = [
         id: 'home',
         label: 'Acasa',
         routeName: 'home',
+        markerClass: 'drawer-link__mark--turquoise',
+        restricted: false,
+        soon: false,
+      },
+      {
+        id: 'projects',
+        label: 'Projects',
+        routeName: 'projects',
         markerClass: 'drawer-link__mark--turquoise',
         restricted: false,
         soon: false,
@@ -104,6 +115,15 @@ export const MENU_SECTIONS: MenuSection[] = [
     label: 'Administration',
     dividerBefore: true,
     items: [
+      {
+        id: 'meditation',
+        label: 'Meditation',
+        routeName: 'meditation',
+        markerClass: 'drawer-link__mark--turquoise',
+        restricted: true,
+        hideWhenRestricted: true,
+        soon: false,
+      },
       {
         id: 'admin-authors',
         label: 'Authors',

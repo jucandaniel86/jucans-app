@@ -103,7 +103,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
               <span>{{ item.label }}</span>
             </RouterLink>
 
-            <button v-else class="drawer-link" type="button" disabled>
+            <button v-else-if="!item.hideWhenRestricted" class="drawer-link" type="button" disabled>
               <span class="drawer-link__mark" :class="item.markerClass" aria-hidden="true" />
               <span>{{ item.label }}</span>
               <span v-if="item.soon" class="drawer-link__soon">Curând</span>

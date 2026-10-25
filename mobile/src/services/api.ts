@@ -137,8 +137,8 @@ export const api = {
     return request<T>(path, { method: 'PATCH', body })
   },
 
-  delete<T>(path: string): Promise<T> {
-    return request<T>(path, { method: 'DELETE' })
+  delete<T>(path: string, body?: unknown): Promise<T> {
+    return request<T>(path, { method: 'DELETE', body })
   },
 
   getText(path: string): Promise<{ text: string; status: number }> {

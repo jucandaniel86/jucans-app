@@ -37,6 +37,15 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* iOS Safari zooms small form controls. Keep pinch zoom and viewport settings intact. */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
 button {
   color: inherit;
 }

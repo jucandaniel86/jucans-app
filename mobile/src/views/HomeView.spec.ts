@@ -45,7 +45,7 @@ describe('HomeView random food widget', () => {
   afterEach(() => vi.useRealTimers())
 
   it('updates the intersection count and navigates with selected tags', async () => {
-    const wrapper = mount(HomeView)
+    const wrapper = mount(HomeView, { global: { stubs: { HomeDailyTasksWidget: true } } })
     await flushPromises()
 
     expect(wrapper.text()).toContain('42 rețete disponibile')

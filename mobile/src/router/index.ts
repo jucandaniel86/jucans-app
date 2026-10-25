@@ -11,6 +11,7 @@ import AdminRecipeReviewsView from '@/views/AdminRecipeReviewsView.vue'
 import RecipeDetailView from '@/views/RecipeDetailView.vue'
 import RandomRecipeView from '@/views/RandomRecipeView.vue'
 import RecipesView from '@/views/RecipesView.vue'
+import MeditationView from '@/views/MeditationView.vue'
 import ShoppingListView from '@/views/ShoppingListView.vue'
 import ShoppingListsView from '@/views/ShoppingListsView.vue'
 //diets
@@ -38,6 +39,36 @@ const router = createRouter({
       component: AppLayout,
       meta: { requiresAuth: true, shoppingList: 'header' },
       children: [
+        {
+          path: 'projects',
+          name: 'projects',
+          component: () => import('@/views/projects/ProjectsView.vue'),
+          meta: { shoppingList: 'hidden' },
+        },
+        {
+          path: 'projects/create',
+          name: 'project-create',
+          component: () => import('@/views/projects/ProjectFormView.vue'),
+          meta: { shoppingList: 'hidden' },
+        },
+        {
+          path: 'projects/:id(\\d+)/edit',
+          name: 'project-edit',
+          component: () => import('@/views/projects/ProjectFormView.vue'),
+          meta: { shoppingList: 'hidden' },
+        },
+        {
+          path: 'projects/:id(\\d+)',
+          name: 'project-detail',
+          component: () => import('@/views/projects/ProjectDetailView.vue'),
+          meta: { shoppingList: 'hidden' },
+        },
+        {
+          path: 'meditation',
+          name: 'meditation',
+          component: MeditationView,
+          meta: { requiresAdmin: true, shoppingList: 'hidden' },
+        },
         { path: 'shopping-lists', name: 'shopping-lists', component: ShoppingListsView },
         { path: 'diets-lists', name: 'diets-lists', component: DietsListsView },
         { path: 'diets/:id', name: 'diet-detail', component: DietDetailView },
