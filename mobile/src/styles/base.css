@@ -37,13 +37,12 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* iOS Safari zooms small form controls. Keep pinch zoom and viewport settings intact. */
-@supports (-webkit-touch-callout: none) {
-  input,
-  textarea,
-  select {
-    font-size: max(16px, 1em) !important;
-  }
+/* Keep controls >=16px before focus, including scoped/lazy forms and native selects.
+   Do not gate this on platform detection or restrict the viewport's user zoom. */
+input,
+textarea,
+select {
+  font-size: max(16px, 1em) !important;
 }
 
 button {
