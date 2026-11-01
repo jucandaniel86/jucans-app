@@ -172,12 +172,10 @@ watch(
           <details ref="actions" class="projects-actions">
             <summary aria-label="Acțiuni proiect">•••</summary>
             <div class="projects-actions__menu">
+              <RouterLink :to="{ name: 'project-edit', params: { id: project.id } }"
+                >Setări proiect</RouterLink
+              >
               <template v-if="isOwner">
-                <RouterLink
-                  v-if="isActive"
-                  :to="{ name: 'project-edit', params: { id: project.id } }"
-                  >Setări proiect</RouterLink
-                >
                 <template v-if="isActive"
                   ><button
                     type="button"

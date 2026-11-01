@@ -5,7 +5,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import ProjectTaskCard from '@/components/projects/ProjectTaskCard.vue'
 import ProjectTaskForm from '@/components/projects/ProjectTaskForm.vue'
-import ProjectProgressNoteForm from '@/components/projects/ProjectProgressNoteForm.vue'
+import ProjectProgressNoteEditor from '@/components/projects/ProjectProgressNoteEditor.vue'
 import { projectDailyTasksApi } from '@/services/projectDailyTasksApi'
 import { projectsApi } from '@/services/projectsApi'
 import { useNotificationStore } from '@/stores/notifications'
@@ -33,6 +33,7 @@ const completedLast = ref(1)
 const busyCount = ref(0)
 const busy = computed(() => busyCount.value > 0)
 const noteTask = ref<ProjectTask | null>(null)
+const noteDate = ref<string>()
 const editor = ref<HTMLElement | null>(null)
 const noteProject = ref<Project | null>(null)
 const creating = ref(false)
@@ -142,13 +143,12 @@ function closeEditor(): void {
   noteProject.value = null
   creating.value = false
 }
-async function openNote(task: ProjectTask): Promise<void> {
+function openNote(task: ProjectTask, selectedDate = date.value): void {
   if (busy.value) return
   closeEditor()
   noteTask.value = task
+  noteDate.value = selectedDate
   noteProject.value = projects.value[task.project_id] ?? null
-  await nextTick()
-  editor.value?.scrollIntoView({ block: 'start' })
 }
 function saved(): void {
   closeEditor()
@@ -231,20 +231,19 @@ onBeforeUnmount(() => {
         Reîncearcă
       </button>
     </div>
-    <div v-if="noteTask && noteProject" ref="editor">
-      <ProjectProgressNoteForm
-        :key="noteTask.id"
-        :project="noteProject"
-        :initial-tasks="[{ id: noteTask.id, title: noteTask.title, deleted_at: null }]"
-        :initial-date="date"
-        :timezone="data?.timezone ?? 'UTC'"
-        @busy="setBusy"
-        @saved="saved"
-        @changed="refresh"
-        @cancel="closeEditor"
-        @access-changed="accessChanged"
-      />
-    </div>
+    <ProjectProgressNoteEditor
+      v-if="noteTask && noteProject"
+      :key="noteTask.id"
+      :project="noteProject"
+      :initial-tasks="[{ id: noteTask.id, title: noteTask.title, deleted_at: null }]"
+      :initial-date="noteDate"
+      :timezone="data?.timezone ?? 'UTC'"
+      @busy="setBusy"
+      @saved="saved"
+      @changed="refresh"
+      @cancel="closeEditor"
+      @access-changed="accessChanged"
+    />
     <div v-if="creating" ref="editor" class="daily-tasks__editor">
       <AppSelect
         v-model="targetProject"

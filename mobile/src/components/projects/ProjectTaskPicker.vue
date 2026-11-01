@@ -12,10 +12,11 @@ const props = withDefaults(
     projectId: number
     modelValue: NoteTask[]
     multiple?: boolean
+    compact?: boolean
     disabled?: boolean
     label?: string
   }>(),
-  { multiple: false, disabled: false, label: 'Alege taskul' },
+  { multiple: false, compact: false, disabled: false, label: 'Alege taskul' },
 )
 const emit = defineEmits<{ 'update:modelValue': [tasks: NoteTask[]]; accessChanged: [] }>()
 const open = ref(false)
@@ -89,15 +90,25 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="progress-task-picker">
+  <div class="progress-task-picker" :class="{ 'progress-task-picker--compact': compact }">
     <div v-if="modelValue.length" class="progress-task-chips">
       <span v-for="task in modelValue" :key="task.id"
-        >{{ task.title }}{{ task.deleted_at ? ' (șters)' : '' }}</span
+        >{{ task.title }}{{ task.deleted_at ? ' (șters)' : ''
+        }}<button
+          v-if="compact"
+          type="button"
+          :disabled="disabled"
+          :aria-label="`Elimină taskul ${task.title}`"
+          @click="select(task)"
+        >
+          ×
+        </button></span
       >
     </div>
     <details :open="open" @toggle="open = ($event.target as HTMLDetailsElement).open">
       <summary @click="disabled && $event.preventDefault()">
-        {{ label }}{{ multiple ? ` (${modelValue.length}/100)` : '' }}
+        {{ compact ? '+ ' : '' }}{{ label
+        }}{{ multiple && !compact ? ` (${modelValue.length}/100)` : '' }}
       </summary>
       <fieldset class="task-fields" :disabled="disabled">
         <AppInput v-model="search" label="Caută în taskurile proiectului" :maxlength="255" />

@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
 import PlusIcon from '@/components/icons/plusIcon.vue'
 import ProjectTaskPicker from '@/components/projects/ProjectTaskPicker.vue'
-import ProjectProgressNoteForm from '@/components/projects/ProjectProgressNoteForm.vue'
+import ProjectProgressNoteEditor from '@/components/projects/ProjectProgressNoteEditor.vue'
 import ProjectEvaluationCard from '@/components/projects/ProjectEvaluationCard.vue'
 import ProjectTaskEvaluations from '@/components/projects/ProjectTaskEvaluations.vue'
+import ProgressNoteValuesDisplay from '@/components/projects/ProgressNoteValuesDisplay.vue'
 import ProgressNoteContent from '@/components/projects/ProgressNoteContent.vue'
 import { projectProgressApi } from '@/services/projectProgressApi'
 import { ApiError } from '@/services/api'
@@ -50,7 +51,6 @@ const editorDate = ref(props.initialDate)
 const creating = ref(Boolean(props.initialTask) && active.value)
 const editing = ref<ProgressNote | undefined>()
 const editorKey = ref(0)
-const editor = ref<HTMLElement | null>(null)
 const evaluationPanel = ref<InstanceType<typeof ProjectTaskEvaluations> | null>(null)
 const busyCount = ref(0)
 const locked = computed(() => busyCount.value > 0 || props.externalBusy)
@@ -120,15 +120,13 @@ function saved(): void {
   changed()
   notifications.success('Progresul a fost salvat.')
 }
-async function openEditor(note?: ProgressNote): Promise<void> {
+function openEditor(note?: ProgressNote): void {
   if (locked.value || !active.value) return
   editing.value = note
   creating.value = !note
   initialTasks.value = note ? [] : [...filterTasks.value]
   editorDate.value = undefined
   editorKey.value++
-  await nextTick()
-  editor.value?.scrollIntoView({ block: 'start' })
 }
 function switchTrash(): void {
   if (locked.value || !owner.value) return
@@ -180,14 +178,10 @@ watch(
     void load()
   },
 )
-onMounted(async () => {
+onMounted(() => {
   void load()
   if (props.initialTask) {
     emit('consumed')
-    if (creating.value) {
-      await nextTick()
-      editor.value?.scrollIntoView({ block: 'start' })
-    }
   }
 })
 onBeforeUnmount(() => {
@@ -218,21 +212,20 @@ onBeforeUnmount(() => {
     <p v-if="trash" class="projects-muted">
       Notele șterse și evaluările lor suspendate sunt vizibile aici doar proprietarului.
     </p>
-    <div v-if="creating || editing" ref="editor">
-      <ProjectProgressNoteForm
-        :key="editorKey"
-        :project="project"
-        :note="editing"
-        :initial-tasks="initialTasks"
-        :initial-date="editorDate"
-        :timezone="timezone"
-        @busy="busy"
-        @changed="changed"
-        @saved="saved"
-        @cancel="closeEditor"
-        @access-changed="emit('accessChanged')"
-      />
-    </div>
+    <ProjectProgressNoteEditor
+      v-if="creating || editing"
+      :key="editorKey"
+      :project="project"
+      :note="editing"
+      :initial-tasks="initialTasks"
+      :initial-date="editorDate"
+      :timezone="timezone"
+      @busy="busy"
+      @changed="changed"
+      @saved="saved"
+      @cancel="closeEditor"
+      @access-changed="emit('accessChanged')"
+    />
     <details class="progress-filters">
       <summary @click="locked && $event.preventDefault()">Filtre și căutare</summary>
       <form class="progress-stack" @submit.prevent="load()">
@@ -293,6 +286,7 @@ onBeforeUnmount(() => {
           </p>
         </header>
         <ProgressNoteContent :content="note.content" />
+        <ProgressNoteValuesDisplay :note="note" />
         <div v-if="note.tasks.length" class="progress-task-chips">
           <button
             v-for="task in note.tasks"

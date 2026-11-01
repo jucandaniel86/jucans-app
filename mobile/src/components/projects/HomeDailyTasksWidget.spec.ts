@@ -74,7 +74,7 @@ it('limits initial tasks, lazy-loads completed, and reuses note/task forms with 
   } as Awaited<ReturnType<typeof projectsApi.list>>)
   const wrapper = mount(HomeDailyTasksWidget, {
     global: {
-      stubs: { ProjectTaskCard: true, ProjectProgressNoteForm: true, ProjectTaskForm: true },
+      stubs: { ProjectTaskCard: true, ProjectProgressNoteEditor: true, ProjectTaskForm: true },
     },
   })
   await flushPromises()
@@ -90,13 +90,13 @@ it('limits initial tasks, lazy-loads completed, and reuses note/task forms with 
   expect(card.props('selectedDate')).toBe('2026-10-25')
   card.vm.$emit('progress', data.rows[0]!.task, '2026-10-24')
   await flushPromises()
-  const noteForm = wrapper.findComponent({ name: 'ProjectProgressNoteForm' })
-  expect(noteForm.props('initialDate')).toBe('2026-10-25')
+  const noteForm = wrapper.findComponent({ name: 'ProjectProgressNoteEditor' })
+  expect(noteForm.props('initialDate')).toBe('2026-10-24')
   expect(noteForm.props('initialTasks')).toEqual([{ id: 1, title: 'Task 1', deleted_at: null }])
   const calls = vi.mocked(projectDailyTasksApi.list).mock.calls.length
   noteForm.vm.$emit('saved')
   await flushPromises()
-  expect(wrapper.findComponent({ name: 'ProjectProgressNoteForm' }).exists()).toBe(false)
+  expect(wrapper.findComponent({ name: 'ProjectProgressNoteEditor' }).exists()).toBe(false)
   expect(projectDailyTasksApi.list).toHaveBeenCalledTimes(calls + 1)
   await wrapper
     .findAll('button')
