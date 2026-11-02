@@ -36,13 +36,15 @@ const props = withDefaults(
     trash?: boolean
     locked?: boolean
     compact?: boolean
+    widgetCompact?: boolean
     selectedDate?: string
     calendarOccurrence?: TaskOccurrence | null
   }>(),
-  { timezone: 'UTC', trash: false, locked: false, compact: false },
+  { timezone: 'UTC', trash: false, locked: false, compact: false, widgetCompact: false },
 )
 const emit = defineEmits<{
   changed: []
+  pendingCommand: [value: boolean]
   busy: [value: boolean]
   accessChanged: []
   progress: [task: ProjectTask, date: string]
@@ -51,6 +53,7 @@ const auth = useAuthStore()
 const notifications = useNotificationStore()
 const task = ref(props.task)
 const expanded = ref(false)
+const widgetDetails = ref<HTMLDetailsElement | null>(null)
 const editing = ref(false)
 const loading = ref(false)
 const busy = ref(false)
@@ -78,6 +81,7 @@ const command = ref<{
   request_id: string
   lock_version: number
 } | null>(null)
+watch(command, (value) => emit('pendingCommand', Boolean(value)), { flush: 'sync' })
 let readSequence = 0
 let historySequence = 0
 let nextSequence = 0
@@ -400,6 +404,7 @@ watch(date, () => {
   if (!command.value && task.value.execution_type !== 'one_time') void loadOccurrence()
 })
 onBeforeUnmount(() => {
+  emit('pendingCommand', false)
   readSequence++
   nextSequence++
   historySequence++
@@ -410,16 +415,73 @@ onBeforeUnmount(() => {
 <template>
   <article
     class="task-card"
-    :class="{ 'task-card--compact': compact, 'task-card--expanded': expanded }"
+    :class="{
+      'task-card--compact': compact,
+      'task-card--expanded': expanded,
+      'task-card--widget': widgetCompact,
+    }"
   >
-    <div class="task-card__heading">
+    <div v-if="widgetCompact" class="task-widget-primary">
+      <button
+        class="task-widget-title"
+        type="button"
+        :title="task.title"
+        :aria-label="`Detalii: ${task.title}`"
+        @click="widgetDetails && (widgetDetails.open = !widgetDetails.open)"
+      >
+        {{ task.title }}
+      </button>
+      <button
+        v-if="activeProject && !trash && !command"
+        class="task-widget-icon"
+        type="button"
+        :disabled="disabled"
+        :aria-label="`Adaugă notă pentru ${task.title}`"
+        title="Adaugă notă"
+        @click="emit('progress', task, props.selectedDate ?? date)"
+      >
+        <PencilIcon />
+      </button>
+      <button
+        v-if="
+          activeProject &&
+          !trash &&
+          !command &&
+          canExecute &&
+          (!occurrence || occurrence.status !== 'done')
+        "
+        class="task-widget-icon task-widget-icon--done"
+        type="button"
+        :disabled="disabled"
+        :aria-label="`Finalizează ${task.title}`"
+        title="Finalizează"
+        @click="execute('done')"
+      >
+        <span aria-hidden="true">✓</span>
+      </button>
+      <button
+        class="task-widget-icon"
+        type="button"
+        aria-label="Detalii și acțiuni task"
+        title="Detalii și acțiuni"
+        :aria-expanded="expanded"
+        @click="widgetDetails && (widgetDetails.open = !widgetDetails.open)"
+      >
+        ⋯
+      </button>
+    </div>
+    <slot v-if="widgetCompact" name="widget-meta" />
+    <div v-if="!widgetCompact" class="task-card__heading">
       <strong :title="task.title">{{ task.title }}</strong
       ><span class="task-priority" :class="`task-priority--${task.priority}`">{{
         taskPriorities[task.priority]
       }}</span>
     </div>
     <p v-if="overdue && (!compact || expanded)" class="task-overdue">Restant</p>
-    <div v-if="!compact || task.scheduled_date || task.due_date" class="task-meta">
+    <div
+      v-if="!widgetCompact && (!compact || task.scheduled_date || task.due_date)"
+      class="task-meta"
+    >
       <span v-if="!compact || task.scheduled_date"
         >Programat: {{ displayDate(task.scheduled_date, task.scheduled_time) }}</span
       ><span v-if="!compact || task.due_date"
@@ -444,7 +506,10 @@ onBeforeUnmount(() => {
         }}
       </p>
       <p v-if="loading" role="status" class="projects-muted">Se încarcă starea…</p>
-      <p v-else class="task-state">
+      <p
+        v-else-if="!widgetCompact || executionError || !eligible || occurrence?.status === 'done'"
+        class="task-state"
+      >
         {{
           executionError ||
           (occurrence
@@ -456,7 +521,10 @@ onBeforeUnmount(() => {
               : 'Fără execuție eligibilă')
         }}
       </p>
-      <div v-if="activeProject && !command" class="task-buttons task-card-actions">
+      <div
+        v-if="activeProject && !command && !widgetCompact"
+        class="task-buttons task-card-actions"
+      >
         <button
           class="task-quick task-quick--note"
           type="button"
@@ -521,11 +589,18 @@ onBeforeUnmount(() => {
     >
       Reîncearcă {{ command.action }} · {{ command.key }}
     </button>
-    <details @toggle="toggle">
-      <summary aria-label="Detalii și acțiuni">
+    <details ref="widgetDetails" @toggle="toggle">
+      <summary v-show="!widgetCompact" aria-label="Detalii și acțiuni">
         {{ compact ? '•••' : 'Detalii și acțiuni' }}
       </summary>
       <div class="task-details">
+        <div v-if="widgetCompact" class="task-meta">
+          <span>Programat: {{ displayDate(task.scheduled_date, task.scheduled_time) }}</span>
+          <span
+            v-if="task.due_date !== task.scheduled_date || task.due_time !== task.scheduled_time"
+            >Termen: {{ displayDate(task.due_date, task.due_time) }}</span
+          >
+        </div>
         <p v-if="!trash" class="projects-muted">
           {{ task.execution_type === 'one_time' ? 'Execuție unică' : displayDate(date) }} ·
           {{
@@ -720,3 +795,61 @@ onBeforeUnmount(() => {
     </details>
   </article>
 </template>
+
+<style scoped>
+.task-card--widget {
+  min-width: 0;
+}
+.task-widget-primary {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0;
+}
+.task-widget-title {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  font: inherit;
+  font-weight: 650;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.task-widget-icon {
+  display: inline-flex;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-primary-strong);
+  font: inherit;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.task-widget-icon--done {
+  color: var(--color-primary);
+  font-weight: 800;
+}
+.task-widget-icon:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.task-widget-title:focus-visible,
+.task-widget-icon:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+</style>

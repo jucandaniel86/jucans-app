@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import ProjectTaskPicker from '@/components/projects/ProjectTaskPicker.vue'
+import ProjectCustomFieldSeries from '@/components/projects/ProjectCustomFieldSeries.vue'
 import ProjectAnalyticsPanel from '@/components/projects/ProjectAnalyticsPanel.vue'
 import { projectChartsApi } from '@/services/projectChartsApi'
 import { projectsApi } from '@/services/projectsApi'
@@ -147,6 +148,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="project-charts project-chart-stack" aria-label="Grafice și statistici">
+    <ProjectCustomFieldSeries :project-id="project.id" @access-changed="emit('accessChanged')" />
     <header class="project-chart-heading">
       <h3>Grafice și statistici</h3>
       <p class="projects-muted">{{ projectProgressLabels[project.progress_type] }}</p>

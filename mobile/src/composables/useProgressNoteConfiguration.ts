@@ -39,8 +39,8 @@ export function useProgressNoteConfiguration(projectId: number, initial?: Progre
   )
   const ready = computed(
     () =>
-      !typesLoading.value &&
-      (!typesError.value || acceptedLegacy.value) &&
+      (Boolean(initial && typeId.value === null) || !typesLoading.value) &&
+      (!typesError.value || acceptedLegacy.value || Boolean(initial && typeId.value === null)) &&
       !fieldsLoading.value &&
       !fieldsError.value,
   )
@@ -63,7 +63,7 @@ export function useProgressNoteConfiguration(projectId: number, initial?: Progre
     }
   }
   async function selectType(id: number | null): Promise<void> {
-    if (initial) return
+    if (initial?.note_type_id) return
     const request = ++sequence
     typeId.value = id
     fields.value = []
@@ -119,7 +119,7 @@ export function useProgressNoteConfiguration(projectId: number, initial?: Progre
     }
   }
   async function loadTypes(): Promise<void> {
-    if (initial) return
+    if (initial?.note_type_id) return
     typesLoading.value = true
     typesError.value = ''
     try {

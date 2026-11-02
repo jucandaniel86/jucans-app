@@ -1,0 +1,11 @@
+{
+    "purpose": "authorized-disposable-jucans-phase2-mysql-test",
+    "database": "jucans_phase2_mysql_test",
+    "username": "jucans_p2_REPLACE_WITH_8_HEX_CHARACTERS",
+    "password": "GENERATE_LOCALLY_NEVER_COMMIT",
+    "socket": "/tmp/mysql.sock",
+    "server_uuid": "REPLACE_WITH_LOCAL_SERVER_UUID",
+    "admin_ddl_authorized": false,
+    "ddl_username": "LOCAL_ADMIN_ACCOUNT",
+    "ddl_password": "STORE_ONLY_IN_IGNORED_LOCAL_CONFIG"
+}

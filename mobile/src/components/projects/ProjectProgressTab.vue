@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
+import PencilIcon from '@/components/icons/pencilIcon.vue'
+import TrashIcon from '@/components/icons/trashIcon.vue'
 import PlusIcon from '@/components/icons/plusIcon.vue'
 import ProjectTaskPicker from '@/components/projects/ProjectTaskPicker.vue'
 import ProjectProgressNoteEditor from '@/components/projects/ProjectProgressNoteEditor.vue'
@@ -168,6 +170,17 @@ async function mutate(note: ProgressNote, restore = false): Promise<void> {
     busy(false)
   }
 }
+// Suppress only the exact generated title/date pair; custom titles stay untouched.
+function dateInGeneratedTitle(note: ProgressNote): boolean {
+  return note.title === `Progres · ${displayDate(note.noted_at)}`
+}
+function unevaluatedTasks(note: ProgressNote): NoteTask[] {
+  return note.tasks.filter((task) => !note.evaluations.some((score) => score.task_id === task.id))
+}
+function openEvaluationTask(note: ProgressNote, id: number): void {
+  const task = note.tasks.find((task) => task.id === id)
+  if (task && !task.deleted_at && !locked.value) evaluationPanel.value?.openFor(task)
+}
 function noteTask(note: ProgressNote, id: number): string {
   return note.tasks.find((task) => task.id === id)?.title ?? `Task #${id}`
 }
@@ -278,18 +291,45 @@ onBeforeUnmount(() => {
     <section v-for="group in grouped" :key="group.date" class="progress-date-group">
       <h4>{{ displayDate(group.date) }}</h4>
       <article v-for="note in group.notes" :key="note.id" class="progress-note">
-        <header>
+        <header class="progress-note__header">
           <h4>{{ note.title }}</h4>
-          <p class="projects-muted">
-            {{ progressAuthor(note.created_by, project, auth.user) }} ·
-            {{ displayDate(note.noted_at) }}
+          <div v-if="canManage(note) && !trash" class="progress-note__actions">
+            <button
+              class="progress-icon-action"
+              type="button"
+              :disabled="locked"
+              aria-label="Editează nota"
+              title="Editează nota"
+              @click="openEditor(note)"
+            >
+              <PencilIcon />
+            </button>
+            <button
+              class="progress-icon-action progress-icon-action--danger"
+              type="button"
+              :disabled="locked"
+              aria-label="Șterge nota"
+              title="Șterge nota"
+              @click="mutate(note)"
+            >
+              <TrashIcon />
+            </button>
+          </div>
+          <p class="projects-muted progress-note__metadata">
+            {{ progressAuthor(note.created_by, project, auth.user)
+            }}<template v-if="!dateInGeneratedTitle(note)">
+              · {{ displayDate(note.noted_at) }}</template
+            >
           </p>
         </header>
         <ProgressNoteContent :content="note.content" />
         <ProgressNoteValuesDisplay :note="note" />
-        <div v-if="note.tasks.length" class="progress-task-chips">
+        <div
+          v-if="(trash ? note.tasks : unevaluatedTasks(note)).length"
+          class="progress-task-chips"
+        >
           <button
-            v-for="task in note.tasks"
+            v-for="task in trash ? note.tasks : unevaluatedTasks(note)"
             :key="task.id"
             type="button"
             :disabled="locked || Boolean(task.deleted_at)"
@@ -298,7 +338,7 @@ onBeforeUnmount(() => {
             {{ task.title }}{{ task.deleted_at ? ' (șters)' : '' }}
           </button>
         </div>
-        <p v-else class="projects-muted">Notă generală · autor și proprietar</p>
+        <p v-if="!note.tasks.length" class="projects-muted">Notă generală · autor și proprietar</p>
         <template v-if="trash"
           ><p v-for="score in note.evaluations" :key="score.id" class="projects-muted">
             {{ noteTask(note, score.task_id) }} · {{ score.score }}/10 ·
@@ -312,6 +352,8 @@ onBeforeUnmount(() => {
             :key="score.id"
             :project="project"
             :evaluation="score"
+            compact
+            @open-task="openEvaluationTask(note, score.task_id)"
             :task-title="noteTask(note, score.task_id)"
             :task-deleted="
               Boolean(note.tasks.find((task) => task.id === score.task_id)?.deleted_at)
@@ -321,32 +363,15 @@ onBeforeUnmount(() => {
             @changed="changed"
             @access-changed="emit('accessChanged')"
         /></template>
-        <div v-if="canManage(note)" class="task-buttons">
+        <div v-if="canManage(note) && trash" class="task-buttons">
           <button
-            v-if="trash"
             class="progress-text-action"
             type="button"
             :disabled="locked"
             @click="mutate(note, true)"
           >
-            Restaurează</button
-          ><template v-else
-            ><button
-              class="progress-text-action"
-              type="button"
-              :disabled="locked"
-              @click="openEditor(note)"
-            >
-              Editează nota</button
-            ><button
-              class="progress-text-action"
-              type="button"
-              :disabled="locked"
-              @click="mutate(note)"
-            >
-              Șterge nota
-            </button></template
-          >
+            Restaurează
+          </button>
         </div>
       </article>
     </section>

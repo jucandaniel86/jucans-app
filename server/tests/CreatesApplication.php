@@ -16,6 +16,8 @@ trait CreatesApplication
 
         $app->make(Kernel::class)->bootstrap();
 
+        \Tests\Support\IsolatedDatabase::assertSafe($app);
+
         return $app;
     }
 }

@@ -1,5 +1,11 @@
 <?php
 
+use App\Http\Controllers\Api\ProjectCustomFieldController;
+use App\Http\Controllers\Api\ProjectCustomFieldOptionController;
+use App\Http\Controllers\Api\ProjectNoteTypeController;
+use App\Http\Controllers\Api\ProjectNoteTypeFieldController;
+
+
   use App\Http\Controllers\Api\Admin\AuthorController;
   use App\Http\Controllers\Api\Admin\AdminIngredientController;
   use App\Http\Controllers\Api\Admin\MeditationController;
@@ -40,6 +46,32 @@
     Route::patch('/projects/{project}', [ProjectController::class, 'update'])->whereNumber('project');
     Route::patch('/projects/{project}/status', [ProjectController::class, 'status'])->whereNumber('project');
     Route::prefix('projects/{project}')->whereNumber('project')->scopeBindings()->group(function () {
+      Route::get('/custom-fields/{field}/series', \App\Http\Controllers\Api\ProjectCustomFieldSeriesController::class)->whereNumber('field');
+      Route::get('/custom-fields', [ProjectCustomFieldController::class, 'index']);
+      Route::post('/custom-fields', [ProjectCustomFieldController::class, 'store']);
+      Route::get('/custom-fields/{field}', [ProjectCustomFieldController::class, 'show'])->whereNumber('field');
+      Route::patch('/custom-fields/{field}', [ProjectCustomFieldController::class, 'update'])->whereNumber('field');
+      Route::post('/custom-fields/{field}/archive', [ProjectCustomFieldController::class, 'archive'])->whereNumber('field');
+      Route::post('/custom-fields/{field}/restore', [ProjectCustomFieldController::class, 'restore'])->whereNumber('field');
+      Route::get('/note-types', [ProjectNoteTypeController::class, 'index']);
+      Route::post('/note-types', [ProjectNoteTypeController::class, 'store']);
+      Route::get('/note-types/{type}', [ProjectNoteTypeController::class, 'show'])->whereNumber('type');
+      Route::patch('/note-types/{type}', [ProjectNoteTypeController::class, 'update'])->whereNumber('type');
+      Route::post('/note-types/{type}/archive', [ProjectNoteTypeController::class, 'archive'])->whereNumber('type');
+      Route::post('/note-types/{type}/restore', [ProjectNoteTypeController::class, 'restore'])->whereNumber('type');
+      Route::post('/note-types/{type}/set-default', [ProjectNoteTypeController::class, 'setDefault'])->whereNumber('type');
+      Route::get('/custom-fields/{field}/options', [ProjectCustomFieldOptionController::class, 'index'])->whereNumber('field');
+      Route::post('/custom-fields/{field}/options', [ProjectCustomFieldOptionController::class, 'store'])->whereNumber('field');
+      Route::post('/custom-fields/{field}/options/reorder', [ProjectCustomFieldOptionController::class, 'reorder'])->whereNumber('field');
+      Route::patch('/custom-fields/{field}/options/{option}', [ProjectCustomFieldOptionController::class, 'update'])->whereNumber('field')->whereNumber('option');
+      Route::post('/custom-fields/{field}/options/{option}/archive', [ProjectCustomFieldOptionController::class, 'archive'])->whereNumber('field')->whereNumber('option');
+      Route::post('/custom-fields/{field}/options/{option}/restore', [ProjectCustomFieldOptionController::class, 'restore'])->whereNumber('field')->whereNumber('option');
+      Route::get('/note-types/{type}/fields', [ProjectNoteTypeFieldController::class, 'index'])->whereNumber('type');
+      Route::post('/note-types/{type}/fields', [ProjectNoteTypeFieldController::class, 'store'])->whereNumber('type');
+      Route::post('/note-types/{type}/fields/create', [ProjectNoteTypeFieldController::class, 'create'])->whereNumber('type')->name('project-note-type-fields.create');
+      Route::post('/note-types/{type}/fields/reorder', [ProjectNoteTypeFieldController::class, 'reorder'])->whereNumber('type');
+      Route::patch('/note-types/{type}/fields/{field}', [ProjectNoteTypeFieldController::class, 'update'])->whereNumber('field')->whereNumber('type');
+      Route::delete('/note-types/{type}/fields/{field}', [ProjectNoteTypeFieldController::class, 'destroy'])->whereNumber('field')->whereNumber('type');
       Route::get('/progress/summary', [ProjectProgressController::class, 'summary']);
       Route::get('/progress/timeline', [ProjectProgressController::class, 'timeline']);
       Route::get('/progress/tasks/{task}', [ProjectProgressController::class, 'task'])->whereNumber('task');

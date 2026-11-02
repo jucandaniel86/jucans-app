@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import type { ProgressNote } from '@/types/projectProgress'
+import { projectIcon } from '@/utils/projectPresentation'
 import { displayNoteValue } from '@/utils/progressNoteFields'
 defineProps<{ note: ProgressNote }>()
 </script>
 <template>
   <details v-if="note.note_type_id && note.configuration" class="progress-note-values">
     <summary>
-      {{ note.configuration.note_type.name }}
-      <span v-if="note.configuration.fields.length"
-        >· {{ note.configuration.fields.length }} câmpuri</span
-      ><span v-if="note.current_configuration_state?.note_type_archived_at"> · Arhivat</span>
+      <span aria-hidden="true">{{ projectIcon('folder') }}</span>
+      <span class="progress-note-values__label"
+        >{{ note.configuration.note_type.name }} ·
+        {{ note.configuration.fields.length }} câmpuri<span
+          v-if="note.current_configuration_state?.note_type_archived_at"
+        >
+          · Arhivat</span
+        ></span
+      >
+      <span class="progress-note-values__chevron" aria-hidden="true">›</span>
     </summary>
     <dl>
       <div v-for="field in note.configuration.fields" :key="field.field_id">
@@ -44,16 +51,28 @@ defineProps<{ note: ProgressNote }>()
   color: var(--color-primary-strong);
   cursor: pointer;
 }
-.progress-note-values summary::before {
-  content: '›';
-  margin-right: 4px;
+.progress-note-values summary::-webkit-details-marker {
+  display: none;
 }
-.progress-note-values[open] summary::before {
+.progress-note-values summary {
+  list-style: none;
+  flex-wrap: nowrap;
+}
+.progress-note-values__label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.progress-note-values__chevron {
+  flex: none;
+  font-size: 1.2rem;
+}
+.progress-note-values[open] .progress-note-values__chevron {
   transform: rotate(90deg);
 }
 .progress-note-values dl {
   display: grid;
-  gap: 8px;
+  gap: 4px;
   margin: 0;
 }
 .progress-note-values dl > div {

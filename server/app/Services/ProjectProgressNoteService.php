@@ -16,6 +16,8 @@ class ProjectProgressNoteService
     public function relations(User $user, bool $trash = false): array
     {
         return [
+            'noteType',
+            'fieldValues.field.options',
             'tasks' => fn ($query) => $query->orderBy('project_tasks.id'),
             'evaluations' => function ($query) use ($user, $trash): void {
                 if (! $trash) {
@@ -34,6 +36,7 @@ class ProjectProgressNoteService
             $taskIds = $this->accessibleTaskIds($user, $project, $input['task_ids'] ?? []);
             $note = new ProjectProgressNote(Arr::only($input, ['title', 'content', 'noted_at']));
             $note->forceFill(['project_id' => $project->id, 'created_by' => $user->id])->save();
+            app(ProjectProgressNoteValuesService::class)->save($project, $note, $input, true);
             $this->syncTasks($project, $note, $taskIds);
             $this->activity($project);
 
@@ -47,7 +50,7 @@ class ProjectProgressNoteService
             $project = Project::query()->whereKey($project->id)->lockForUpdate()->firstOrFail();
             $note = $this->lockedNote($project, $note);
             Gate::forUser($user)->authorize('update', $note);
-            $changed = false;
+            $changed = app(ProjectProgressNoteValuesService::class)->save($project, $note, $input, false);
             if (array_key_exists('task_ids', $input)) {
                 $ids = $this->accessibleTaskIds($user, $project, $input['task_ids']);
                 $existing = $note->tasks()->orderBy('project_tasks.id')->pluck('project_tasks.id')->map(fn ($id) => (int) $id)->all();

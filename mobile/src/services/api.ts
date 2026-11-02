@@ -20,7 +20,7 @@ export class ApiError extends Error {
   }
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '')
+const apiBaseUrl =  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '')
 
 let accessToken: string | null = null
 let unauthorizedHandler: (() => void | Promise<void>) | null = null

@@ -256,3 +256,132 @@
   padding-block: var(--space-1);
   overflow-wrap: anywhere;
 }
+
+/* Journal cards retain full content height while keeping actions within reach. */
+.progress-note {
+  padding: 12px;
+  gap: 8px;
+}
+.progress-note__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 4px;
+}
+.progress-note__header h4 {
+  margin: 0;
+  align-self: center;
+  font-size: 0.94rem;
+  line-height: 1.35;
+}
+.progress-note__actions,
+.progress-evaluation__actions {
+  display: flex;
+  align-items: flex-start;
+  flex: none;
+}
+.progress-note__metadata {
+  grid-column: 1 / -1;
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+.progress-icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-primary-strong);
+  font: inherit;
+  cursor: pointer;
+  list-style: none;
+}
+.progress-icon-action::-webkit-details-marker {
+  display: none;
+}
+.progress-icon-action--danger {
+  color: var(--color-error);
+}
+.progress-icon-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.progress-icon-action:focus-visible,
+.progress-evaluation__task:focus-visible,
+.progress-note-values summary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.progress-note .progress-evaluation--compact {
+  padding: 4px 0;
+  border-top: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+}
+.progress-evaluation__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 4px;
+  min-width: 0;
+}
+.progress-evaluation__task {
+  flex: 1 1 80px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary-strong);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.progress-evaluation__task:disabled {
+  color: var(--color-text-muted);
+  cursor: default;
+}
+.progress-evaluation__badge {
+  flex: none;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.progress-evaluation__metadata {
+  flex-basis: 100%;
+  min-width: 0;
+  font-size: 0.74rem;
+  overflow-wrap: anywhere;
+}
+.progress-evaluation__menu {
+  position: relative;
+}
+.progress-evaluation__menu-items {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 2;
+  display: grid;
+  width: max-content;
+  max-width: min(220px, 70vw);
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+.progress-evaluation__menu-items button {
+  overflow-wrap: anywhere;
+}

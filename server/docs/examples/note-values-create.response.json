@@ -1,0 +1,181 @@
+{
+    "data": {
+        "id": 1,
+        "project_id": 1,
+        "created_by": 1,
+        "updated_by": null,
+        "title": "Observation",
+        "content": "An example note",
+        "noted_at": "2020-01-01",
+        "note_type_id": 1,
+        "configuration": {
+            "schema_version": 1,
+            "note_type": {
+                "id": 1,
+                "project_id": 1,
+                "name": "General",
+                "description": null,
+                "template": "Context:\n",
+                "is_default": true,
+                "archived_at": null
+            },
+            "fields": [
+                {
+                    "field_id": 1,
+                    "association_id": 1,
+                    "required": true,
+                    "sort_order": 0,
+                    "definition": {
+                        "id": 1,
+                        "project_id": 1,
+                        "key": "number",
+                        "name": "Number",
+                        "description": null,
+                        "type": "number",
+                        "unit": "points",
+                        "min": "0.000000",
+                        "max": "10.000000",
+                        "step": "0.500000",
+                        "aggregation": "average",
+                        "archived_at": null
+                    },
+                    "options": []
+                },
+                {
+                    "field_id": 2,
+                    "association_id": 2,
+                    "required": false,
+                    "sort_order": 1,
+                    "definition": {
+                        "id": 2,
+                        "project_id": 1,
+                        "key": "text",
+                        "name": "Text",
+                        "description": null,
+                        "type": "text",
+                        "unit": null,
+                        "min": null,
+                        "max": null,
+                        "step": null,
+                        "aggregation": null,
+                        "archived_at": null
+                    },
+                    "options": []
+                },
+                {
+                    "field_id": 3,
+                    "association_id": 3,
+                    "required": true,
+                    "sort_order": 2,
+                    "definition": {
+                        "id": 3,
+                        "project_id": 1,
+                        "key": "boolean",
+                        "name": "Boolean",
+                        "description": null,
+                        "type": "boolean",
+                        "unit": null,
+                        "min": null,
+                        "max": null,
+                        "step": null,
+                        "aggregation": null,
+                        "archived_at": null
+                    },
+                    "options": []
+                },
+                {
+                    "field_id": 4,
+                    "association_id": 4,
+                    "required": false,
+                    "sort_order": 3,
+                    "definition": {
+                        "id": 4,
+                        "project_id": 1,
+                        "key": "select",
+                        "name": "Select",
+                        "description": null,
+                        "type": "select",
+                        "unit": null,
+                        "min": null,
+                        "max": null,
+                        "step": null,
+                        "aggregation": null,
+                        "archived_at": null
+                    },
+                    "options": [
+                        {
+                            "id": 1,
+                            "field_id": 4,
+                            "label": "Low",
+                            "sort_order": 0,
+                            "archived_at": null
+                        }
+                    ]
+                }
+            ]
+        },
+        "configuration_captured_at": "2026-10-31T12:00:00.123456Z",
+        "values": [
+            {
+                "field_id": 1,
+                "value": "0.000000"
+            },
+            {
+                "field_id": 2,
+                "value": "  Detail:\n"
+            },
+            {
+                "field_id": 3,
+                "value": false
+            },
+            {
+                "field_id": 4,
+                "value": 1
+            }
+        ],
+        "current_configuration_state": {
+            "note_type_archived_at": null,
+            "fields": [
+                {
+                    "field_id": 1,
+                    "type": "number",
+                    "unit": "points",
+                    "archived_at": null,
+                    "options": []
+                },
+                {
+                    "field_id": 2,
+                    "type": "text",
+                    "unit": null,
+                    "archived_at": null,
+                    "options": []
+                },
+                {
+                    "field_id": 3,
+                    "type": "boolean",
+                    "unit": null,
+                    "archived_at": null,
+                    "options": []
+                },
+                {
+                    "field_id": 4,
+                    "type": "select",
+                    "unit": null,
+                    "archived_at": null,
+                    "options": [
+                        {
+                            "id": 1,
+                            "archived_at": null
+                        }
+                    ]
+                }
+            ]
+        },
+        "task_ids": [],
+        "tasks": [],
+        "evaluations": [],
+        "created_at": "2026-10-31T12:00:00.123456Z",
+        "updated_at": "2026-10-31T12:00:00.123456Z",
+        "deleted_at": null
+    }
+}

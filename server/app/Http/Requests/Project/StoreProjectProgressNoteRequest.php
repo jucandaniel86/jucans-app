@@ -17,6 +17,15 @@ class StoreProjectProgressNoteRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'note_type_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'values' => ['sometimes', 'array', 'max:1000'],
+            'values.*' => ['required', 'array:field_id,value'],
+            'values.*.field_id' => ['required', 'integer', 'min:1'],
+            'values.*.value' => ['present'],
+            'configuration' => ['prohibited'],
+            'configuration_snapshot' => ['prohibited'],
+            'configuration_captured_at' => ['prohibited'],
+            'first_value_at' => ['prohibited'],
             'title' => ['required', 'string', 'max:255'],
             'content' => ['required', 'string'],
             'noted_at' => ['required', 'date_format:Y-m-d'],

@@ -54,6 +54,8 @@ const {
   typesError,
   fieldsError,
 } = configuration
+const assigningType = ref(false)
+const uncertainAssignment = ref(false)
 const typeSwitching = ref(false)
 const contentUserEdited = ref(false)
 const form = reactive({
@@ -64,6 +66,7 @@ const form = reactive({
 const selected = ref<NoteTask[]>([...(initial?.tasks ?? props.initialTasks)])
 const choices = reactive<Record<number, { score: string | number; update: boolean }>>({})
 const state = reactive<NoteSaveState>({ note: null, noteSaved: false, finished: new Set<number>() })
+const savedNote = computed(() => (state.noteSaved ? state.note : initial))
 const busy = ref(false)
 const unknownCreation = ref(false)
 const error = ref('')
@@ -169,6 +172,7 @@ const saveDisabled = computed(
     unknownCreation.value ||
     !canManage.value ||
     typeSwitching.value ||
+    (assigningType.value && typeId.value === null) ||
     (!state.noteSaved && !configuration.ready.value),
 )
 const closeMessage = computed(() =>
@@ -272,8 +276,47 @@ async function initializeConfiguration(): Promise<void> {
   )
     void applyInitialTemplate()
 }
+async function beginAssignment(): Promise<void> {
+  if (!initial || initial.note_type_id || frozen.value || uncertainAssignment.value) return
+  // Invalidate any earlier preview; assignment never applies a type template.
+  previewRequest++
+  contentRevision++
+  previewLoading.value = false
+  preview.value = null
+  previewError.value = ''
+  autoTemplatePending = false
+  assigningType.value = true
+  await configuration.loadTypes()
+}
+async function cancelAssignment(): Promise<void> {
+  if (frozen.value || uncertainAssignment.value) return
+  assigningType.value = false
+  await configuration.selectType(null)
+}
 async function switchType(next: number | null, acceptLegacy = false): Promise<void> {
-  if (initial || frozen.value || typeSwitching.value) return
+  if (frozen.value || typeSwitching.value || uncertainAssignment.value) return
+  if (initial) {
+    if (!assigningType.value || initial.note_type_id) return
+    if (next === typeId.value) return
+    typeSwitching.value = true
+    try {
+      if (
+        configuration.hasValues.value &&
+        !(await confirmation.value?.ask({
+          title: 'Schimbi tipul atribuit?',
+          message:
+            'Valorile câmpurilor vor fi înlocuite. Textul și celelalte modificări se păstrează.',
+          confirmText: 'Schimbă tipul',
+          cancelText: 'Continuă editarea',
+        }))
+      )
+        return
+      if (!disposed && !frozen.value) await configuration.selectType(next)
+    } finally {
+      typeSwitching.value = false
+    }
+    return
+  }
   if (next === typeId.value) {
     if (acceptLegacy) {
       configuration.continueLegacy()
@@ -324,7 +367,13 @@ function changeType(event: Event): void {
   void switchType(next)
 }
 async function reloadFields(): Promise<void> {
-  if (initial || frozen.value || typeSwitching.value) return
+  if (
+    (initial && !assigningType.value) ||
+    frozen.value ||
+    typeSwitching.value ||
+    uncertainAssignment.value
+  )
+    return
   if (
     configuration.hasValues.value &&
     !(await confirmation.value?.ask({
@@ -357,6 +406,7 @@ async function save(): Promise<void> {
   emit('busy', true)
   error.value = ''
   errors.value = {}
+  let attemptedAssignment = false
   let attemptedCreate = false
   let submittedValues: NoteFieldEntry[] = []
   try {
@@ -365,6 +415,8 @@ async function save(): Promise<void> {
       errors.value.noted_at = ['Alege o dată validă pentru observație.']
     if (form.title.length > 255)
       errors.value.title = ['Titlul poate avea maximum 255 de caractere.']
+    if (assigningType.value && typeId.value === null)
+      errors.value.note_type_id = ['Alege un tip activ sau anulează atribuirea.']
     const fieldsValid = state.noteSaved || configuration.validate()
     if (Object.keys(errors.value).length || !fieldsValid) {
       error.value = 'Verifică informațiile introduse.'
@@ -384,7 +436,7 @@ async function save(): Promise<void> {
       unchanged ? undefined : ids,
     )
     submittedValues = configuration.entries()
-    if (!initial && typeId.value !== null) {
+    if ((!initial || assigningType.value) && typeId.value !== null) {
       payload.note_type_id = typeId.value
       payload.values = submittedValues
     } else if (initial?.note_type_id && submittedValues.length) payload.values = submittedValues
@@ -405,6 +457,7 @@ async function save(): Promise<void> {
       }
       intents.push({ task_id: task.id, score, ...(value ? { existing: value } : {}) })
     }
+    attemptedAssignment = Boolean(initial && assigningType.value && !state.noteSaved)
     attemptedCreate = !initial && !state.noteSaved
     await saveNoteAndScores(props.project.id, initial?.id, payload, intents, state)
     completed.value = true
@@ -427,6 +480,16 @@ async function save(): Promise<void> {
       : message
     if (state.noteSaved) {
       evaluationsOpen.value = true
+      emit('changed')
+    }
+    if (
+      attemptedAssignment &&
+      !state.noteSaved &&
+      (!(failure instanceof ApiError) || failure.status === 0 || failure.status >= 500)
+    ) {
+      uncertainAssignment.value = true
+      error.value =
+        'Nu putem confirma atribuirea. Reîncearcă salvarea cu același tip; configurația deja salvată va fi păstrată. Pentru anulare sau alt tip, închide și reîncarcă nota mai întâi.'
       emit('changed')
     }
     if (
@@ -467,27 +530,48 @@ defineExpose({ save, dirty, busy, saveLabel, saveDisabled, closeMessage })
     </div>
     <fieldset class="note-editor-fields" :disabled="frozen">
       <div class="note-editor-type">
-        <template v-if="initial"
+        <template v-if="(initial && !assigningType) || state.noteSaved"
           ><span class="note-editor-type-label">Tip de notă</span>
           <p>
             {{
-              initial.configuration?.note_type.name ??
-              (initial.note_type_id ? 'Tip salvat' : 'Fără tip')
-            }}<span v-if="initial.current_configuration_state?.note_type_archived_at">
+              savedNote?.configuration?.note_type.name ??
+              (savedNote?.note_type_id ? 'Tip salvat' : 'Fără tip')
+            }}<span v-if="savedNote?.current_configuration_state?.note_type_archived_at">
               · Arhivat</span
             >
-          </p></template
-        >
+          </p>
+          <button
+            v-if="!savedNote?.note_type_id && !state.noteSaved"
+            type="button"
+            class="note-editor-text-action"
+            @click="beginAssignment"
+          >
+            Atribuie tip de notă
+          </button>
+        </template>
         <template v-else>
+          <p v-if="assigningType" class="note-editor-hint">
+            Atribuirea folosește configurația curentă și devine fixă după salvare. Textul
+            observației se păstrează.
+          </p>
+          <button
+            v-if="assigningType"
+            type="button"
+            class="note-editor-text-action"
+            :disabled="typeSwitching || uncertainAssignment"
+            @click="cancelAssignment"
+          >
+            Anulează atribuirea
+          </button>
           <label :for="`${observationId}-type`">Tip de notă</label>
           <select
             :id="`${observationId}-type`"
             :value="typeId === null ? '' : String(typeId)"
-            :disabled="frozen || typesLoading || typeSwitching"
+            :disabled="frozen || typesLoading || typeSwitching || uncertainAssignment"
             :aria-busy="typesLoading"
             @change="changeType"
           >
-            <option value="">Fără tip</option>
+            <option value="">{{ assigningType ? 'Alege un tip activ' : 'Fără tip' }}</option>
             <option v-for="type in noteTypes" :key="type.id" :value="String(type.id)">
               {{ type.name }}{{ type.is_default ? ' · Implicit' : '' }}
             </option>
@@ -495,9 +579,18 @@ defineExpose({ save, dirty, busy, saveLabel, saveDisabled, closeMessage })
           <p v-if="typesLoading" role="status" class="note-editor-hint">Se încarcă tipurile…</p>
           <div v-if="typesError" role="alert" class="note-editor-field-error">
             <p>{{ typesError }}</p>
-            <button type="button" class="note-editor-text-action" @click="initializeConfiguration">
+            <button
+              type="button"
+              class="note-editor-text-action"
+              @click="assigningType ? beginAssignment() : initializeConfiguration()"
+            >
               Reîncearcă tipurile</button
-            ><button type="button" class="note-editor-text-action" @click="switchType(null, true)">
+            ><button
+              v-if="!assigningType"
+              type="button"
+              class="note-editor-text-action"
+              @click="switchType(null, true)"
+            >
               Continuă fără tip
             </button>
           </div>
@@ -546,7 +639,7 @@ defineExpose({ save, dirty, busy, saveLabel, saveDisabled, closeMessage })
         <p v-if="errors.content" :id="`${observationId}-error`" class="note-editor-field-error">
           {{ errors.content[0] }}
         </p>
-        <details class="note-editor-template">
+        <details v-if="!assigningType" class="note-editor-template">
           <summary>
             {{ typeId === null ? 'Template proiect' : 'Template tip' }}
             <span v-if="previewLoading" role="status">· se încarcă…</span>
@@ -578,7 +671,13 @@ defineExpose({ save, dirty, busy, saveLabel, saveDisabled, closeMessage })
       <p v-if="fieldsLoading" role="status" class="note-editor-hint">Se încarcă câmpurile…</p>
       <div v-if="fieldsError" role="alert" class="note-editor-field-error">
         <p>{{ fieldsError }}</p>
-        <button v-if="!initial" type="button" class="note-editor-text-action" @click="reloadFields">
+        <button
+          v-if="!initial || assigningType"
+          type="button"
+          class="note-editor-text-action"
+          :disabled="uncertainAssignment"
+          @click="reloadFields"
+        >
           Reîncearcă câmpurile
         </button>
       </div>
@@ -592,7 +691,13 @@ defineExpose({ save, dirty, busy, saveLabel, saveDisabled, closeMessage })
         @change="(id, value) => (customValues[id] = value)"
       />
       <button
-        v-if="!initial && typeId !== null && !fieldsLoading && !fieldsError"
+        v-if="
+          (!initial || assigningType) &&
+          typeId !== null &&
+          !fieldsLoading &&
+          !fieldsError &&
+          !uncertainAssignment
+        "
         class="note-editor-text-action note-editor-reload-fields"
         type="button"
         @click="reloadFields"

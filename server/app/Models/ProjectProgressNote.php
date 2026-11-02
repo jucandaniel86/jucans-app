@@ -17,6 +17,18 @@ class ProjectProgressNote extends Model
 
     protected $fillable = ['title', 'content', 'noted_at'];
 
+    protected $casts = ['note_type_id' => 'integer', 'configuration_snapshot' => 'array', 'configuration_captured_at' => 'immutable_datetime'];
+
+    public function noteType(): BelongsTo
+    {
+        return $this->belongsTo(ProjectNoteType::class);
+    }
+
+    public function fieldValues(): HasMany
+    {
+        return $this->hasMany(ProjectProgressNoteValue::class, 'note_id')->orderBy('id');
+    }
+
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);

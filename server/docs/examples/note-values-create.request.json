@@ -1,0 +1,24 @@
+{
+    "title": "Observation",
+    "content": "An example note",
+    "noted_at": "2020-01-01",
+    "note_type_id": 1,
+    "values": [
+        {
+            "field_id": 1,
+            "value": "0.000000"
+        },
+        {
+            "field_id": 2,
+            "value": "  Detail:\n"
+        },
+        {
+            "field_id": 3,
+            "value": false
+        },
+        {
+            "field_id": 4,
+            "value": 1
+        }
+    ]
+}

@@ -17,3 +17,6 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+
+# Local disposable MySQL test credentials (never commit).
+/.mysql-testing.local.json

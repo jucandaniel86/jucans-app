@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import PencilIcon from '@/components/icons/pencilIcon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { ApiError } from '@/services/api'
 import { projectProgressApi } from '@/services/projectProgressApi'
@@ -17,10 +18,11 @@ const props = withDefaults(
     taskTitle: string
     locked?: boolean
     taskDeleted?: boolean
+    compact?: boolean
   }>(),
-  { locked: false, taskDeleted: false },
+  { locked: false, taskDeleted: false, compact: false },
 )
-const emit = defineEmits<{ changed: []; busy: [value: boolean]; accessChanged: [] }>()
+const emit = defineEmits<{ changed: []; busy: [value: boolean]; accessChanged: []; openTask: [] }>()
 const auth = useAuthStore()
 const notifications = useNotificationStore()
 const record = ref(props.evaluation)
@@ -32,6 +34,12 @@ const error = ref('')
 const withdrawn = ref(false)
 const revisions = ref<EvaluationRevision[]>([])
 const historyOpen = ref(false)
+const actionMenu = ref<HTMLDetailsElement | null>(null)
+function closeMenu(): void {
+  if (!actionMenu.value) return
+  actionMenu.value.open = false
+  actionMenu.value.querySelector('summary')?.focus()
+}
 const historyLoading = ref(false)
 const historyError = ref('')
 const page = ref(0)
@@ -157,17 +165,93 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="progress-evaluation">
-    <div class="progress-evaluation__header">
-      <strong>{{ taskTitle }} · {{ record.score }}/10</strong
-      ><span>{{ displayDate(record.evaluation_date) }}</span>
+  <div class="progress-evaluation" :class="{ 'progress-evaluation--compact': compact }">
+    <div v-if="compact" class="progress-evaluation__row">
+      <button
+        class="progress-evaluation__task"
+        type="button"
+        :disabled="locked || taskDeleted"
+        @click="emit('openTask')"
+      >
+        {{ taskTitle }}{{ taskDeleted ? ' (șters)' : '' }}
+      </button>
+      <span class="progress-evaluation__badge" :aria-label="`Scor ${record.score} din 10`"
+        >{{ record.score }}/10</span
+      >
+      <div class="progress-evaluation__actions">
+        <button
+          v-if="canManage && !editing"
+          class="progress-icon-action"
+          type="button"
+          :disabled="locked || busy"
+          :aria-label="`Editează scorul pentru ${taskTitle}`"
+          title="Editează scorul"
+          @click="edit"
+        >
+          <PencilIcon />
+        </button>
+        <details
+          v-if="canManage || !taskDeleted"
+          ref="actionMenu"
+          class="progress-evaluation__menu"
+          @keydown.esc.prevent.stop="closeMenu"
+        >
+          <summary
+            class="progress-icon-action"
+            :aria-label="`Acțiuni evaluare pentru ${taskTitle}`"
+            title="Acțiuni evaluare"
+          >
+            ⋯
+          </summary>
+          <div class="progress-evaluation__menu-items">
+            <button
+              v-if="canManage"
+              class="progress-text-action"
+              type="button"
+              :disabled="locked || busy"
+              @click="
+                closeMenu()
+                mutate(true)
+              "
+            >
+              Retrage evaluarea
+            </button>
+            <button
+              v-if="!taskDeleted"
+              class="progress-text-action"
+              type="button"
+              :disabled="busy"
+              :aria-expanded="historyOpen"
+              @click="
+                closeMenu()
+                toggleHistory()
+              "
+            >
+              {{ historyOpen ? 'Ascunde reviziile' : 'Vezi reviziile' }}
+            </button>
+          </div>
+        </details>
+      </div>
+      <p class="projects-muted progress-evaluation__metadata">
+        {{ progressAuthor(record.created_by, project, auth.user) }} ·
+        {{ displayDate(record.evaluation_date)
+        }}{{
+          withdrawn || record.withdrawn_at ? ' · Retrasă' : !record.is_active ? ' · Suspendată' : ''
+        }}
+      </p>
     </div>
-    <p class="projects-muted">
-      {{ progressAuthor(record.created_by, project, auth.user)
-      }}{{
-        withdrawn || record.withdrawn_at ? ' · Retrasă' : !record.is_active ? ' · Suspendată' : ''
-      }}
-    </p>
+    <template v-else>
+      <div class="progress-evaluation__header">
+        <strong>{{ taskTitle }} · {{ record.score }}/10</strong
+        ><span>{{ displayDate(record.evaluation_date) }}</span>
+      </div>
+      <p class="projects-muted">
+        {{ progressAuthor(record.created_by, project, auth.user)
+        }}{{
+          withdrawn || record.withdrawn_at ? ' · Retrasă' : !record.is_active ? ' · Suspendată' : ''
+        }}
+      </p>
+    </template>
     <p v-if="error" class="projects-error" role="alert">{{ error }}</p>
     <form v-if="editing && canManage" class="progress-inline-form" @submit.prevent="mutate()">
       <label
@@ -187,7 +271,7 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </form>
-    <div class="task-buttons">
+    <div v-if="!compact" class="task-buttons">
       <button
         v-if="canManage && !editing"
         class="progress-text-action"

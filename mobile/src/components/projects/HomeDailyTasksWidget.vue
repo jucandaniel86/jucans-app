@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, RouterLink } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import ProjectTaskCard from '@/components/projects/ProjectTaskCard.vue'
 import ProjectTaskForm from '@/components/projects/ProjectTaskForm.vue'
 import ProjectProgressNoteEditor from '@/components/projects/ProjectProgressNoteEditor.vue'
+import { ApiError } from '@/services/api'
 import { projectDailyTasksApi } from '@/services/projectDailyTasksApi'
 import { projectsApi } from '@/services/projectsApi'
 import { useNotificationStore } from '@/stores/notifications'
@@ -47,9 +48,87 @@ const target = computed(() =>
   choices.value.find((project) => project.id === Number(targetProject.value)),
 )
 const date = computed(() => data.value?.date ?? today())
-const visible = computed(() => (expanded.value ? rows.value : rows.value.slice(0, 5)))
+const headerDate = computed(() => {
+  const [year, month, day] = date.value.split('-').map(Number)
+  const weekday = new Date(Date.UTC(year!, month! - 1, day!)).getUTCDay()
+  return { label: ['Du', 'Lu', 'Ma', 'Mi', 'Jo', 'Vi', 'Sâ'][weekday], day }
+})
+const rowKey = (row: DailyTaskRow) => `${row.task.id}:${row.occurrence.occurrence_key}`
+const overdueRows = computed(() => rows.value.filter((row) => row.section === 'overdue'))
+const overdueIndex = ref(0)
+const pendingOverdueCommand = ref(false)
+const selectedOccurrence = ref('')
+const currentOverdue = computed(() => overdueRows.value[overdueIndex.value])
+const visible = computed(() => {
+  const pending = rows.value.filter((row) => row.section !== 'overdue')
+  return expanded.value ? pending : pending.slice(0, 5)
+})
+const completion = computed(() =>
+  data.value?.summary.scheduled
+    ? Math.min(100, (100 * data.value.summary.completed) / data.value.summary.scheduled)
+    : 0,
+)
+watch(
+  overdueRows,
+  (items) => {
+    const preserved = items.findIndex((row) => rowKey(row) === selectedOccurrence.value)
+    overdueIndex.value =
+      preserved >= 0 ? preserved : Math.min(overdueIndex.value, Math.max(0, items.length - 1))
+    selectedOccurrence.value = items[overdueIndex.value] ? rowKey(items[overdueIndex.value]!) : ''
+  },
+  { flush: 'sync' },
+)
+function navigateOverdue(delta: number): void {
+  if (busy.value || loading.value || pendingOverdueCommand.value) return
+  overdueIndex.value = Math.max(
+    0,
+    Math.min(overdueRows.value.length - 1, overdueIndex.value + delta),
+  )
+  selectedOccurrence.value = currentOverdue.value ? rowKey(currentOverdue.value) : ''
+}
+let swipe: { x: number; y: number; id: number } | null = null
+let suppressClick = false
+function swipeStart(event: PointerEvent): void {
+  suppressClick = false
+  if (
+    event.pointerType !== 'touch' ||
+    pendingOverdueCommand.value ||
+    busy.value ||
+    loading.value ||
+    (event.target as HTMLElement).closest('.task-widget-icon, details, input, select')
+  )
+    return
+  swipe = { x: event.clientX, y: event.clientY, id: event.pointerId }
+}
+function swipeEnd(event: PointerEvent): void {
+  if (!swipe || swipe.id !== event.pointerId) return
+  const dx = event.clientX - swipe.x,
+    dy = event.clientY - swipe.y
+  swipe = null
+  if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    suppressClick = true
+    navigateOverdue(dx < 0 ? 1 : -1)
+  }
+}
+function swipeClick(event: MouseEvent): void {
+  if (!suppressClick) return
+  event.preventDefault()
+  event.stopPropagation()
+  suppressClick = false
+}
+function overdueAge(row: DailyTaskRow): string {
+  const deadline = row.task.due_date ?? row.task.scheduled_date
+  if (!deadline) return 'Restant'
+  const days = Math.round(
+    (Date.parse(`${date.value}T00:00:00Z`) - Date.parse(`${deadline}T00:00:00Z`)) / 86400000,
+  )
+  return days <= 0
+    ? 'Restant de astăzi'
+    : days === 1
+      ? '1 zi întârziere'
+      : `${days} zile întârziere`
+}
 const sections = [
-  { key: 'overdue', label: 'Restante' },
   { key: 'today', label: 'Astăzi' },
   { key: 'persistent', label: 'Permanente' },
 ] as const
@@ -71,12 +150,32 @@ async function load(more = false): Promise<void> {
       await projectDailyTasksApi.list(more ? (data.value?.pagination.page ?? 0) + 1 : 1)
     ).data
     if (request !== sequence || disposed) return
+    // Fetch the complete existing active dataset; never restrict carousel to the preview/page.
+    const allRows = [...response.rows]
+    const allProjects = [...response.projects]
+    for (
+      let nextPage = response.pagination.page + 1;
+      nextPage <= response.pagination.last_page;
+      nextPage++
+    ) {
+      const next = (await projectDailyTasksApi.list(nextPage)).data
+      if (request !== sequence || disposed) return
+      if (next.date !== response.date) {
+        void load()
+        return
+      }
+      allRows.push(...next.rows)
+      allProjects.push(...next.projects)
+    }
+    response.rows = [...new Map(allRows.map((row) => [rowKey(row), row])).values()]
+    response.projects = allProjects
+    response.pagination.page = response.pagination.last_page
     const sameDay = data.value?.date === response.date
     data.value = response
     remember(response.projects)
     rows.value =
       more && sameDay
-        ? [...new Map([...rows.value, ...response.rows].map((row) => [row.task.id, row])).values()]
+        ? [...new Map([...rows.value, ...response.rows].map((row) => [rowKey(row), row])).values()]
         : response.rows
     if (!sameDay) {
       completedRows.value = []
@@ -84,9 +183,12 @@ async function load(more = false): Promise<void> {
     }
   } catch (failure) {
     if (request === sequence && !disposed) {
-      rows.value = []
-      data.value = null
-      completedRows.value = []
+      // Keep network-error drafts, but never retain rows after access is revoked.
+      if (failure instanceof ApiError && [401, 403, 404].includes(failure.status)) {
+        rows.value = []
+        data.value = null
+        completedRows.value = []
+      }
       error.value = taskError(failure)
     }
   } finally {
@@ -109,7 +211,7 @@ async function loadCompleted(more = false): Promise<void> {
     completedRows.value = more
       ? [
           ...new Map(
-            [...completedRows.value, ...response.rows].map((row) => [row.task.id, row]),
+            [...completedRows.value, ...response.rows].map((row) => [rowKey(row), row]),
           ).values(),
         ]
       : response.rows
@@ -156,6 +258,8 @@ function saved(): void {
   notifications.success('Salvat.')
 }
 function accessChanged(): void {
+  rows.value = []
+  data.value = null
   closeEditor()
   projects.value = {}
   void refresh()
@@ -213,17 +317,30 @@ onBeforeUnmount(() => {
 <template>
   <section class="daily-tasks" aria-label="Taskurile zilei">
     <header class="daily-tasks__heading">
-      <h2>Taskurile zilei</h2>
+      <time
+        class="daily-tasks__date-tile"
+        :datetime="date"
+        :aria-label="displayDate(date)"
+        :title="displayDate(date)"
+      >
+        <span>{{ headerDate.label }}</span
+        ><strong>{{ headerDate.day }}</strong>
+      </time>
+      <div class="daily-tasks__title">
+        <h2>Taskurile zilei</h2>
+        <span v-if="data" class="daily-tasks__completion"
+          >{{ data.summary.completed }}/{{ data.summary.scheduled }} finalizate</span
+        >
+      </div>
       <AppButton variant="secondary" :disabled="busy" @click="openCreate">+ Task</AppButton>
     </header>
-    <p v-if="data" class="daily-tasks__summary">
-      {{
-        data.summary.scheduled
-          ? `${data.summary.completed} din ${data.summary.scheduled} taskuri programate astăzi finalizate`
-          : 'Niciun task programat astăzi.'
-      }}
-      <span>{{ displayDate(data.date) }}</span>
-    </p>
+    <div v-if="data" class="daily-tasks__summary">
+      <progress
+        :value="completion"
+        max="100"
+        :aria-label="`${data.summary.completed} din ${data.summary.scheduled} taskuri programate astăzi finalizate`"
+      />
+    </div>
     <p v-if="loading" role="status" class="projects-muted">Se încarcă taskurile…</p>
     <div v-if="error" class="projects-error" role="alert">
       <p>{{ error }}</p>
@@ -282,6 +399,77 @@ onBeforeUnmount(() => {
       />
       <button v-else class="task-quick" type="button" @click="closeEditor">Închide</button>
     </div>
+    <section v-if="currentOverdue" class="daily-tasks__group" aria-label="Taskuri restante">
+      <header class="daily-tasks__carousel-heading">
+        <h3>Restante · {{ overdueRows.length }}</h3>
+        <nav v-if="overdueRows.length > 1" aria-label="Navigare restante">
+          <button
+            type="button"
+            aria-label="Restanța anterioară"
+            title="Anterior"
+            :disabled="busy || loading || pendingOverdueCommand || overdueIndex === 0"
+            @click="navigateOverdue(-1)"
+          >
+            ‹
+          </button>
+          <span aria-live="polite">{{ overdueIndex + 1 }}/{{ overdueRows.length }}</span>
+          <button
+            type="button"
+            aria-label="Restanța următoare"
+            title="Următor"
+            :disabled="
+              busy || loading || pendingOverdueCommand || overdueIndex === overdueRows.length - 1
+            "
+            @click="navigateOverdue(1)"
+          >
+            ›
+          </button>
+        </nav>
+      </header>
+      <article
+        class="daily-tasks__row daily-tasks__row--overdue daily-tasks__slide"
+        @pointerdown="swipeStart"
+        @pointerup="swipeEnd"
+        @pointercancel="swipe = null"
+        @click.capture="swipeClick"
+      >
+        <ProjectTaskCard
+          v-if="projects[currentOverdue.task.project_id]"
+          :key="rowKey(currentOverdue)"
+          :project="projects[currentOverdue.task.project_id]!"
+          :task="currentOverdue.task"
+          :timezone="data?.timezone ?? 'UTC'"
+          :selected-date="
+            currentOverdue.occurrence.occurrence_key === 'single'
+              ? date
+              : currentOverdue.occurrence.occurrence_key
+          "
+          :calendar-occurrence="currentOverdue.occurrence"
+          :locked="busy || loading"
+          compact
+          widget-compact
+          @pending-command="pendingOverdueCommand = $event"
+          @busy="setBusy"
+          @changed="refresh"
+          @progress="openNote"
+          @access-changed="accessChanged"
+        >
+          <template #widget-meta>
+            <div class="daily-tasks__secondary">
+              <RouterLink
+                :to="{ name: 'project-detail', params: { id: currentOverdue.task.project_id } }"
+                >{{ projects[currentOverdue.task.project_id]?.name }}</RouterLink
+              ><span
+                :title="
+                  displayDate(currentOverdue.task.due_date ?? currentOverdue.task.scheduled_date)
+                "
+                >{{ overdueAge(currentOverdue) }}</span
+              >
+            </div>
+          </template>
+        </ProjectTaskCard>
+      </article>
+    </section>
     <template v-for="section in sections" :key="section.key">
       <section v-if="visible.some((row) => row.section === section.key)" class="daily-tasks__group">
         <h3>
@@ -289,7 +477,7 @@ onBeforeUnmount(() => {
         </h3>
         <article
           v-for="row in visible.filter((row) => row.section === section.key)"
-          :key="row.task.id"
+          :key="rowKey(row)"
           class="daily-tasks__row"
           :class="`daily-tasks__row--${section.key}`"
         >
@@ -319,8 +507,8 @@ onBeforeUnmount(() => {
       Nu ai taskuri de făcut pentru astăzi.
     </p>
     <button
-      v-if="!expanded && (data?.pagination.total ?? 0) > 5"
-      class="task-quick"
+      v-if="!expanded && rows.filter((row) => row.section !== 'overdue').length > 5"
+      class="daily-tasks__footer-link"
       type="button"
       :disabled="busy"
       @click="expanded = true"
@@ -358,7 +546,7 @@ onBeforeUnmount(() => {
       </div>
       <article
         v-for="row in completedRows"
-        :key="row.task.id"
+        :key="rowKey(row)"
         class="daily-tasks__row daily-tasks__row--completed"
       >
         <RouterLink
@@ -410,10 +598,41 @@ onBeforeUnmount(() => {
   background: var(--color-surface);
 }
 .daily-tasks__heading {
-  display: flex;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+}
+.daily-tasks__title {
+  min-width: 0;
+  text-align: center;
+}
+.daily-tasks__completion {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+}
+.daily-tasks__heading h2 {
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.daily-tasks__date-tile {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.daily-tasks__date-tile span {
+  font-size: 0.8rem;
+}
+.daily-tasks__date-tile strong {
+  font-size: 1.3rem;
+  line-height: 1.1;
 }
 .daily-tasks h2 {
   margin: 0;
@@ -487,5 +706,136 @@ onBeforeUnmount(() => {
 }
 .daily-tasks__completed > article {
   margin-bottom: 8px;
+}
+</style>
+
+<style scoped>
+.daily-tasks {
+  position: relative;
+  min-width: 0;
+  gap: 8px;
+  padding: 16px 12px 8px;
+}
+.daily-tasks::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 7px;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: linear-gradient(
+    90deg,
+    var(--color-primary) 0 52%,
+    var(--color-yellow) 52% 74%,
+    var(--color-pink) 74%
+  );
+  content: '';
+}
+.daily-tasks__summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 0.78rem;
+}
+.daily-tasks__summary span {
+  display: inline;
+  margin: 0;
+}
+.daily-tasks__summary progress {
+  width: 100%;
+  height: 4px;
+  border: 0;
+  border-radius: 2px;
+  overflow: hidden;
+  appearance: none;
+  background: var(--color-surface-soft);
+  color: var(--color-primary);
+}
+.daily-tasks__summary progress::-webkit-progress-bar {
+  background: var(--color-surface-soft);
+}
+.daily-tasks__summary progress::-webkit-progress-value {
+  background: var(--color-primary);
+}
+.daily-tasks__summary progress::-moz-progress-bar {
+  background: var(--color-primary);
+}
+.daily-tasks__carousel-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+}
+.daily-tasks__carousel-heading nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+.daily-tasks__carousel-heading button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-primary-strong);
+  font: inherit;
+  font-size: 1.3rem;
+  cursor: pointer;
+}
+.daily-tasks__carousel-heading button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.daily-tasks__slide {
+  touch-action: pan-y;
+}
+.daily-tasks__secondary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+.daily-tasks__secondary a {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: inherit;
+}
+.daily-tasks__secondary span {
+  flex: none;
+}
+.daily-tasks__footer-link {
+  justify-self: start;
+  min-height: 44px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--color-primary-strong);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.daily-tasks__completed > summary {
+  padding-block: 4px;
+}
+.daily-tasks__group {
+  gap: 4px;
+}
+.daily-tasks__row :deep(.task-card--compact) {
+  padding: 4px 6px;
+  gap: 4px;
+}
+.daily-tasks__row :deep(.task-card--widget > details:not([open])) {
+  margin: 0;
+  padding: 0;
 }
 </style>

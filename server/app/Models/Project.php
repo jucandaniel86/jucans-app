@@ -56,6 +56,16 @@ class Project extends Model
         return $this->hasMany(ProjectTask::class);
     }
 
+    public function customFields(): HasMany
+    {
+        return $this->hasMany(ProjectCustomField::class);
+    }
+
+    public function noteTypes(): HasMany
+    {
+        return $this->hasMany(ProjectNoteType::class);
+    }
+
     public function notes(): HasMany
     {
         return $this->hasMany(ProjectProgressNote::class);
