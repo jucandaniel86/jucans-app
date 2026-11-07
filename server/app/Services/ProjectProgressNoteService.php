@@ -17,6 +17,8 @@ class ProjectProgressNoteService
     {
         return [
             'noteType',
+            'author:id,username',
+            'review.occurrence',
             'fieldValues.field.options',
             'tasks' => fn ($query) => $query->orderBy('project_tasks.id'),
             'evaluations' => function ($query) use ($user, $trash): void {
@@ -38,6 +40,9 @@ class ProjectProgressNoteService
             $note->forceFill(['project_id' => $project->id, 'created_by' => $user->id])->save();
             app(ProjectProgressNoteValuesService::class)->save($project, $note, $input, true);
             $this->syncTasks($project, $note, $taskIds);
+            if (isset($input['review_task_id'])) {
+                app(ProjectTaskReviewService::class)->attach($user, $project, $note, $input);
+            }
             $this->activity($project);
 
             return $note->refresh()->load($this->relations($user));
@@ -53,6 +58,8 @@ class ProjectProgressNoteService
             $changed = app(ProjectProgressNoteValuesService::class)->save($project, $note, $input, false);
             if (array_key_exists('task_ids', $input)) {
                 $ids = $this->accessibleTaskIds($user, $project, $input['task_ids']);
+                $review = $note->review;
+                abort_if($review !== null && $ids !== [(int) $review->task_id], 409, 'Review task association cannot change.');
                 $existing = $note->tasks()->orderBy('project_tasks.id')->pluck('project_tasks.id')->map(fn ($id) => (int) $id)->all();
                 if ($existing !== $ids) {
                     abort_if($note->evaluations()->whereNotIn('task_id', $ids)->exists(), 409, 'Keep task associations referenced by evaluation history.');
@@ -81,6 +88,7 @@ class ProjectProgressNoteService
             }
             $note->forceFill(['updated_by' => $user->id])->save();
             $note->delete();
+            app(ProjectTaskReviewService::class)->releaseDeletedSingle($note);
             $this->activity($project);
         });
     }
@@ -100,6 +108,7 @@ class ProjectProgressNoteService
                     409, 'An active evaluation already exists for a linked task/date. Withdraw it explicitly before restoring this note.');
                 $seen[$key] = true;
             }
+            app(ProjectTaskReviewService::class)->reserveRestoredSingle($note);
             $note->forceFill(['updated_by' => $user->id])->restore();
             foreach ($evaluations as $evaluation) {
                 $evaluation->fill(['active_slot' => '1', 'lock_version' => $evaluation->lock_version + 1])->save();

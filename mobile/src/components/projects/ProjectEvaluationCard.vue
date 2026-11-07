@@ -40,6 +40,14 @@ function closeMenu(): void {
   actionMenu.value.open = false
   actionMenu.value.querySelector('summary')?.focus()
 }
+function withdrawFromMenu(): void {
+  closeMenu()
+  void mutate(true)
+}
+function toggleHistoryFromMenu(): void {
+  closeMenu()
+  toggleHistory()
+}
 const historyLoading = ref(false)
 const historyError = ref('')
 const page = ref(0)
@@ -209,10 +217,7 @@ onBeforeUnmount(() => {
               class="progress-text-action"
               type="button"
               :disabled="locked || busy"
-              @click="
-                closeMenu()
-                mutate(true)
-              "
+              @click="withdrawFromMenu"
             >
               Retrage evaluarea
             </button>
@@ -222,10 +227,7 @@ onBeforeUnmount(() => {
               type="button"
               :disabled="busy"
               :aria-expanded="historyOpen"
-              @click="
-                closeMenu()
-                toggleHistory()
-              "
+              @click="toggleHistoryFromMenu"
             >
               {{ historyOpen ? 'Ascunde reviziile' : 'Vezi reviziile' }}
             </button>

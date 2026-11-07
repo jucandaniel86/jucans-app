@@ -4,8 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import jucansPlaceholder from '@/assets/jucans_logo.png'
 import AppButton from '@/components/ui/AppButton.vue'
-import UserAvatar from '@/components/user/UserAvatar.vue'
-import RecipeSearch from '@/components/recipe/RecipeSearch.vue'
+import PencilIcon from '@/components/icons/pencilIcon.vue'
 import { foodApi } from '@/services/foodApi'
 import { useAddRecipeToShoppingList } from '@/composables/useAddRecipeToShoppingList'
 import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
@@ -35,6 +34,15 @@ const source = computed(() => {
   }
 })
 const { adding, addToList } = useAddRecipeToShoppingList(() => recipe.value?.id ?? null)
+
+function back(): void {
+  const previous = router.options.history.state.back
+  if (typeof previous === 'string' && previous.startsWith('/') && !previous.startsWith('//')) {
+    router.back()
+  } else {
+    void router.replace({ name: 'recipes', query: { ...route.query } })
+  }
+}
 
 async function loadRecipe(): Promise<void> {
   const sequence = ++requestSequence
@@ -75,10 +83,9 @@ onBeforeUnmount(() => {
   <section class="recipe-detail">
     <div class="recipe-detail__navigation">
       <div class="recipe-detail__toolbar">
-        <button type="button" aria-label="Înapoi" @click="router.back()">‹</button>
+        <button type="button" aria-label="Înapoi" @click="back">‹</button>
         <RouterLink :to="{ name: 'recipes' }">Toate rețetele</RouterLink>
       </div>
-      <RecipeSearch />
     </div>
 
     <div v-if="loading" class="recipe-detail__loading" aria-label="Se încarcă rețeta">
@@ -94,39 +101,58 @@ onBeforeUnmount(() => {
     </div>
 
     <template v-else>
-      <img
-        class="recipe-detail__image"
-        :class="{ 'recipe-detail__image--placeholder': !recipe.image_url }"
-        :src="recipe.image_url ?? jucansPlaceholder"
-        :alt="recipe.image_url ? `Imagine ${recipe.name}` : ''"
-      />
-
       <header class="recipe-detail__header">
-        <div>
-          <p>Rețetă</p>
-          <h1>{{ recipe.name }}</h1>
+        <h1>{{ recipe.name }}</h1>
+        <div class="recipe-detail__actions">
+          <AppButton
+            class="recipe-detail__icon-action"
+            variant="secondary"
+            :loading="adding"
+            :aria-label="`Adaugă ingredientele rețetei ${recipe.name} la lista de cumpărături`"
+            title="Adaugă la lista de cumpărături"
+            @click="addToList"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 3h2l3 12h11l2-8H6" />
+              <circle cx="9" cy="20" r="1" />
+              <circle cx="18" cy="20" r="1" />
+            </svg>
+          </AppButton>
+          <RouterLink
+            class="recipe-detail__icon-action"
+            :to="{ name: 'recipe-edit', params: { id: recipe.id } }"
+            :aria-label="`Editează rețeta ${recipe.name}`"
+            title="Editează rețeta"
+          >
+            <PencilIcon />
+          </RouterLink>
         </div>
-        <RouterLink
-          class="recipe-detail__edit"
-          :to="{ name: 'recipe-edit', params: { id: recipe.id } }"
-        >
-          Editează
-        </RouterLink>
       </header>
 
-      <div v-if="recipe.tags.length" class="recipe-detail__tags">
+      <div v-if="recipe.tags.length || recipe.author" class="recipe-detail__tags">
         <span v-for="tag in recipe.tags" :key="tag.id">
           {{ tag.emoji ? `${tag.emoji} ${tag.name}` : tag.name }}
         </span>
-      </div>
-
-      <div class="recipe-detail__creator">
-        <UserAvatar
-          :avatar="recipe.creator.avatar"
-          :username="recipe.creator.username"
-          size="small"
-        />
-        <span>Adăugată de {{ recipe.creator.username }}</span>
+        <RouterLink
+          v-if="recipe.author"
+          class="recipe-detail__author"
+          :to="{ name: 'recipes', query: { author_id: String(recipe.author.id) } }"
+          :aria-label="`Vezi rețetele autorului ${recipe.author.name}`"
+          :title="recipe.author.name"
+        >
+          <img :src="recipe.author.icon_url ?? jucansPlaceholder" alt="" width="18" height="18" />
+          <span>{{ recipe.author.name }}</span>
+        </RouterLink>
       </div>
 
       <a
@@ -138,23 +164,24 @@ onBeforeUnmount(() => {
         >{{ source.label }}</a
       >
 
-      <div class="recipe-detail__shopping">
-        <AppButton variant="secondary" :loading="adding" @click="addToList">
-          <span aria-hidden="true">🛒</span> Adaugă la listă
-        </AppButton>
-        <RouterLink :to="{ name: shopping.list ? 'shopping-list' : 'shopping-lists' }">{{
-          shopping.list ? shoppingListName(shopping.list) : 'Alege lista'
-        }}</RouterLink>
-        <ShoppingListAccess v-if="shopping.list" :list="shopping.list" />
-      </div>
-
-      <section v-if="recipe.description" class="recipe-detail__section">
-        <h2>Despre rețetă</h2>
-        <p class="recipe-detail__description">{{ recipe.description }}</p>
-      </section>
+      <img
+        class="recipe-detail__image"
+        :class="{ 'recipe-detail__image--placeholder': !recipe.image_url }"
+        :src="recipe.image_url ?? jucansPlaceholder"
+        :alt="recipe.image_url ? `Imagine ${recipe.name}` : ''"
+      />
 
       <section class="recipe-detail__section">
-        <h2>Ingrediente</h2>
+        <div class="recipe-detail__ingredients-heading">
+          <h2>Ingrediente</h2>
+          <RouterLink
+            class="recipe-detail__list-link"
+            :to="{ name: shopping.list ? 'shopping-list' : 'shopping-lists' }"
+            :title="shopping.list ? shoppingListName(shopping.list) : 'Alege lista de cumpărături'"
+            >{{ shopping.list ? shoppingListName(shopping.list) : 'Alege lista' }}</RouterLink
+          >
+        </div>
+        <ShoppingListAccess v-if="shopping.list" :list="shopping.list" />
         <ul v-if="recipe.ingredients.length" class="recipe-detail__ingredients">
           <li v-for="ingredient in recipe.ingredients" :key="ingredient.id">
             <span aria-hidden="true" />
@@ -168,6 +195,11 @@ onBeforeUnmount(() => {
         </ul>
         <p v-else class="recipe-detail__muted">Nu sunt ingrediente salvate.</p>
       </section>
+
+      <section v-if="recipe.description" class="recipe-detail__section">
+        <h2>Despre rețetă</h2>
+        <p class="recipe-detail__description">{{ recipe.description }}</p>
+      </section>
     </template>
   </section>
 </template>
@@ -178,30 +210,9 @@ onBeforeUnmount(() => {
   gap: var(--space-2);
   min-width: 0;
 }
-.recipe-detail__source {
-  justify-self: start;
-  margin-top: calc(var(--space-3) * -1);
-}
-.recipe-detail__shopping {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-}
-.recipe-detail__shopping :deep(.app-button) {
-  min-height: 44px;
-  padding: 0 var(--space-3);
-  border-radius: 8px;
-}
-.recipe-detail__shopping a {
-  padding: var(--space-2) 0;
-  color: var(--color-primary-strong);
-  font-size: 0.85rem;
-  font-weight: 700;
-}
 .recipe-detail {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-2);
 }
 
 .recipe-detail__toolbar {
@@ -209,6 +220,8 @@ onBeforeUnmount(() => {
   min-height: 44px;
   align-items: center;
   gap: var(--space-2);
+  justify-content: space-between;
+  flex-direction: row-reverse;
 }
 
 .recipe-detail__toolbar button {
@@ -234,8 +247,7 @@ onBeforeUnmount(() => {
 
 .recipe-detail__image {
   width: 100%;
-  aspect-ratio: 1;
-  max-height: 560px;
+  aspect-ratio: 16 / 9;
   border-radius: 8px;
   object-fit: cover;
   background: var(--color-surface);
@@ -250,49 +262,58 @@ onBeforeUnmount(() => {
 .recipe-detail__header {
   display: flex;
   align-items: start;
-  justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  min-width: 0;
 }
 
-.recipe-detail__header p,
 .recipe-detail__header h1 {
+  flex: 1;
+  min-width: 0;
   margin: 0;
-}
-
-.recipe-detail__header p {
-  color: var(--color-primary-strong);
-  font-size: 0.75rem;
-  font-weight: 850;
-  text-transform: uppercase;
-}
-
-.recipe-detail__header h1 {
-  margin-top: var(--space-1);
   overflow-wrap: anywhere;
-  font-size: 1.8rem;
-  line-height: 1.15;
+  font-size: 1.35rem;
+  line-height: 1.2;
   letter-spacing: 0;
 }
 
-.recipe-detail__edit {
+.recipe-detail__actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+}
+
+.recipe-detail__actions .recipe-detail__icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
   min-height: 44px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-primary);
+  padding: 0;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   color: var(--color-primary-strong);
-  font-weight: 750;
-  line-height: 42px;
+  background: var(--color-surface);
   text-decoration: none;
-  background: var(--color-primary-soft);
+  box-shadow: none;
+}
+
+.recipe-detail__icon-action :deep(.app-button__spinner) {
+  border-color: var(--color-border);
+  border-top-color: var(--color-primary-strong);
 }
 
 .recipe-detail__tags {
   display: flex;
+  align-items: center;
+  min-width: 0;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
 
-.recipe-detail__tags span {
+.recipe-detail__tags > span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
   padding: 6px 10px;
   border-radius: var(--radius-pill);
   color: var(--color-text-muted);
@@ -301,19 +322,67 @@ onBeforeUnmount(() => {
   background: var(--color-yellow-soft);
 }
 
-.recipe-detail__creator {
-  display: flex;
+.recipe-detail__author {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 36px;
+  max-width: 100%;
   align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: 0.86rem;
+  gap: 4px;
+  padding: 0 6px;
+  border: 1px solid #e1e1e1;
+  border-radius: 999px;
+  color: #666;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.recipe-detail__author img {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.recipe-detail__author span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recipe-detail__author:hover {
+  color: #111;
+  background: #f0f0f0;
+}
+
+.recipe-detail__ingredients-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 var(--space-2);
+  min-width: 0;
+}
+.recipe-detail__list-link {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 44px;
+  max-width: 100%;
+  color: var(--color-primary-strong);
+  font-size: 0.8rem;
   font-weight: 700;
+  overflow-wrap: anywhere;
+  text-decoration: none;
 }
 
 .recipe-detail__section {
   display: grid;
-  gap: var(--space-3);
-  padding-top: var(--space-4);
+  min-width: 0;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
   border-top: 1px solid var(--color-border);
 }
 
@@ -327,6 +396,7 @@ onBeforeUnmount(() => {
 }
 
 .recipe-detail__description {
+  overflow-wrap: anywhere;
   line-height: 1.65;
   white-space: pre-wrap;
 }
@@ -358,6 +428,7 @@ onBeforeUnmount(() => {
 .recipe-detail__ingredients strong,
 .recipe-detail__ingredients small {
   display: block;
+  overflow-wrap: anywhere;
 }
 
 .recipe-detail__ingredients strong {
@@ -392,11 +463,6 @@ onBeforeUnmount(() => {
   height: 58px;
   border-radius: 8px;
   background: var(--color-border);
-}
-
-.recipe-detail__loading span:first-child {
-  height: auto;
-  aspect-ratio: 1;
 }
 
 .recipe-detail__state {

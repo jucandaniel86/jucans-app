@@ -13,6 +13,8 @@ import AppTextarea from '@/components/ui/AppTextarea.vue'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import ProjectNoteTypesLibrary from '@/components/projects/ProjectNoteTypesLibrary.vue'
 import ProjectCustomFieldsLibrary from '@/components/projects/ProjectCustomFieldsLibrary.vue'
+import ProjectSharingSettings from '@/components/projects/ProjectSharingSettings.vue'
+import ProjectChartsSettings from '@/components/projects/ProjectChartsSettings.vue'
 import { ApiError } from '@/services/api'
 import { projectsApi } from '@/services/projectsApi'
 import { useAuthStore } from '@/stores/auth'
@@ -41,15 +43,17 @@ const tabs = [
   { name: 'charts', label: 'Charts' },
 ] as const
 type EditTab = (typeof tabs)[number]['name']
+const project = ref<Project | null>(null)
 const tabId = useId()
 const activeTab = computed<EditTab>(() =>
-  editing.value && (route.query.tab === 'settings' || route.query.tab === 'charts')
+  editing.value &&
+  project.value?.created_by === auth.user?.id &&
+  (route.query.tab === 'settings' || route.query.tab === 'charts')
     ? route.query.tab
     : 'general',
 )
 const settingsVisited = ref(false)
 const fieldLibraryVersion = ref(0)
-const project = ref<Project | null>(null)
 const categories = ref<ProjectCategory[]>([])
 const loading = ref(true)
 const saving = ref(false)
@@ -222,16 +226,18 @@ watch(
 </script>
 
 <template>
-  <section class="projects-page">
-    <RouterLink class="projects-back" :to="back"
-      >‹ {{ editing ? 'Înapoi la proiect' : 'Toate proiectele' }}</RouterLink
-    >
-    <h1>{{ editing ? 'Setări proiect' : 'Proiect nou' }}</h1>
-    <p class="projects-muted">
-      {{
-        editing ? 'Un proiect care evoluează odată cu tine.' : 'Începe cu un nume și o direcție.'
-      }}
-    </p>
+  <section class="projects-page" :class="{ 'project-edit-page': editing }">
+    <header v-if="editing" class="project-edit-header">
+      <h1>Setări proiect</h1>
+      <RouterLink class="project-edit-back" :to="back" aria-label="Înapoi la proiect">
+        ‹ Înapoi
+      </RouterLink>
+    </header>
+    <template v-else>
+      <RouterLink class="projects-back" :to="back">‹ Toate proiectele</RouterLink>
+      <h1>Proiect nou</h1>
+      <p class="projects-muted">Începe cu un nume și o direcție.</p>
+    </template>
     <p v-if="loading" role="status">Se încarcă…</p>
     <div v-else-if="loadError" class="projects-error" role="alert">
       <p>{{ loadError }}</p>
@@ -239,7 +245,7 @@ watch(
     </div>
     <template v-else>
       <div
-        v-if="editing"
+        v-if="editing && project?.created_by === auth.user?.id"
         class="projects-tabs project-edit-tabs"
         role="tablist"
         aria-label="Configurare proiect"
@@ -336,9 +342,16 @@ watch(
           }}</AppButton>
           <RouterLink v-if="!saving" class="projects-cancel" :to="back">Renunță</RouterLink>
         </form>
+        <ProjectSharingSettings
+          v-if="editing && project && project.created_by === auth.user?.id"
+          :key="project.id"
+          :project="project"
+          :disabled="saving"
+          @busy="saving = $event"
+        />
       </section>
       <section
-        v-if="editing && project"
+        v-if="editing && project && project.created_by === auth.user?.id"
         v-show="activeTab === 'settings'"
         :id="`${tabId}-settings-panel`"
         class="project-edit-panel"
@@ -360,7 +373,7 @@ watch(
         />
       </section>
       <section
-        v-if="editing && project"
+        v-if="editing && project && project.created_by === auth.user?.id"
         v-show="activeTab === 'charts'"
         :id="`${tabId}-charts-panel`"
         class="project-edit-panel"
@@ -368,11 +381,11 @@ watch(
         :aria-labelledby="`${tabId}-charts`"
         tabindex="0"
       >
-        <div class="project-edit-charts">
-          <h2>Configurare grafice</h2>
-          <p>Aici vei putea configura graficele proiectului și sursele lor de date.</p>
-          <span class="projects-badge">În curând</span>
-        </div>
+        <ProjectChartsSettings
+          v-if="activeTab === 'charts'"
+          :project="project"
+          @busy="saving = $event"
+        />
       </section>
     </template>
   </section>
@@ -381,6 +394,36 @@ watch(
 <style src="./projects.css"></style>
 
 <style scoped>
+.project-edit-page {
+  gap: var(--space-2);
+}
+.project-edit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.project-edit-header h1 {
+  min-width: 0;
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+.project-edit-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-primary-strong);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
 .project-edit-tabs {
   min-width: 0;
   gap: 2px;

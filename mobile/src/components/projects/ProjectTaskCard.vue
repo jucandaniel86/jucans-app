@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
-import PencilIcon from '@/components/icons/pencilIcon.vue'
+import ProjectTaskReviews from '@/components/projects/ProjectTaskReviews.vue'
+import TaskOccurrenceStatusControl from '@/components/projects/TaskOccurrenceStatusControl.vue'
 import ProjectTaskForm from '@/components/projects/ProjectTaskForm.vue'
 import { ApiError } from '@/services/api'
 import { projectTasksApi } from '@/services/projectTasksApi'
@@ -55,6 +56,12 @@ const task = ref(props.task)
 const expanded = ref(false)
 const widgetDetails = ref<HTMLDetailsElement | null>(null)
 const editing = ref(false)
+const detailsId = useId()
+const actionMenu = ref<HTMLDetailsElement | null>(null)
+const menuPanel = ref<HTMLElement | null>(null)
+const menuOpen = ref(false)
+const menuStyle = ref<Record<string, string>>({})
+const shownStatus = ref<TaskOccurrence['status']>(props.calendarOccurrence?.status ?? 'pending')
 const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
@@ -112,14 +119,129 @@ const canExecute = computed(
         occurrence.value?.status === 'done')),
 )
 const disabled = computed(() => busy.value || props.locked)
-const doneLabel = computed(() =>
-  task.value.execution_type === 'persistent' && date.value === today(props.timezone)
-    ? 'Done Today'
-    : task.value.execution_type === 'one_time' || (props.compact && !expanded.value)
-      ? 'Done'
-      : `Done · ${displayDate(date.value)}`,
+const occurrenceDate = computed(
+  () =>
+    occurrence.value?.scheduled_date ??
+    (task.value.execution_type === 'one_time' ? task.value.scheduled_date : date.value),
 )
-const overdue = computed(() => taskIsOverdue(task.value, props.timezone))
+const overdue = computed(() => {
+  const projected = { ...task.value, scheduled_date: occurrenceDate.value }
+  const relevant = projected.due_date ?? projected.scheduled_date
+  return (
+    !props.trash &&
+    !loading.value &&
+    eligible.value &&
+    shownStatus.value === 'pending' &&
+    relevant !== null &&
+    relevant < today(props.timezone) &&
+    taskIsOverdue(projected, props.timezone)
+  )
+})
+const displayedRule = computed(() => {
+  const rules = [latestRule.value, currentRule.value].filter(
+    (rule): rule is TaskSchedule =>
+      rule !== null &&
+      rule.effective_from <= date.value &&
+      (!rule.start_date || rule.start_date <= date.value) &&
+      (!rule.end_date || date.value <= rule.end_date),
+  )
+  return rules.sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0]
+})
+const recurrenceLabel = computed(() => {
+  const rule = displayedRule.value
+  if (!rule) return 'Recurent'
+  if (rule.recurrence_type === 'weekdays') return 'Săptămânal'
+  if (rule.recurrence_type === 'monthly') return 'Lunar'
+  return scheduleLabel({ ...rule, scheduled_time: null })
+})
+watch(
+  occurrence,
+  (value) => {
+    if (value) shownStatus.value = value.status
+  },
+  { flush: 'sync' },
+)
+watch(
+  [key, () => props.task.id],
+  () => {
+    shownStatus.value = 'pending'
+  },
+  { flush: 'sync' },
+)
+
+watch(canManage, (value) => {
+  if (!value) closeMenu()
+})
+function closeMenu(): void {
+  if (actionMenu.value) actionMenu.value.open = false
+  menuOpen.value = false
+}
+async function positionMenu(): Promise<void> {
+  await nextTick()
+  const trigger = actionMenu.value?.querySelector('summary')
+  if (!menuOpen.value || !trigger || !menuPanel.value) return
+  const rect = trigger.getBoundingClientRect()
+  const viewport = window.visualViewport
+  const left = viewport?.offsetLeft ?? 0,
+    top = viewport?.offsetTop ?? 0
+  const width = viewport?.width ?? window.innerWidth,
+    height = viewport?.height ?? window.innerHeight
+  const panelWidth = Math.min(200, width - 24)
+  const panelHeight = Math.min(menuPanel.value.scrollHeight, height - 24)
+  menuStyle.value = {
+    width: `${panelWidth}px`,
+    maxHeight: `${height - 24}px`,
+    left: `${Math.max(left + 12, Math.min(rect.right - panelWidth, left + width - panelWidth - 12))}px`,
+    top: `${Math.max(top + 12, Math.min(rect.bottom + 4, top + height - panelHeight - 12))}px`,
+  }
+}
+function outsideMenu(event: PointerEvent): void {
+  if (
+    !actionMenu.value?.contains(event.target as Node) &&
+    !menuPanel.value?.contains(event.target as Node)
+  )
+    closeMenu()
+}
+function menuKey(event: KeyboardEvent): void {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  closeMenu()
+  actionMenu.value?.querySelector('summary')?.focus({ preventScroll: true })
+}
+async function keyboardMenu(): Promise<void> {
+  if (!actionMenu.value) return
+  actionMenu.value.open = !actionMenu.value.open
+  menuOpen.value = actionMenu.value.open
+  await positionMenu()
+  if (menuOpen.value) menuPanel.value?.querySelector('button')?.focus({ preventScroll: true })
+}
+function editFromMenu(): void {
+  closeMenu()
+  actionMenu.value?.querySelector('summary')?.focus({ preventScroll: true })
+  editing.value = true
+  if (widgetDetails.value) widgetDetails.value.open = true
+}
+function deleteFromMenu(): void {
+  closeMenu()
+  actionMenu.value?.querySelector('summary')?.focus({ preventScroll: true })
+  void manage('delete')
+}
+watch(menuOpen, (value) => {
+  if (value) {
+    void positionMenu()
+    document.addEventListener('pointerdown', outsideMenu)
+    document.addEventListener('keydown', menuKey)
+    window.addEventListener('resize', positionMenu)
+    document.addEventListener('scroll', positionMenu, true)
+    window.visualViewport?.addEventListener('resize', positionMenu)
+  } else {
+    document.removeEventListener('pointerdown', outsideMenu)
+    document.removeEventListener('keydown', menuKey)
+    window.removeEventListener('resize', positionMenu)
+    document.removeEventListener('scroll', positionMenu, true)
+    window.visualViewport?.removeEventListener('resize', positionMenu)
+  }
+})
 function setBusy(value: boolean): void {
   busy.value = value
   emit('busy', value)
@@ -390,6 +512,7 @@ watch(
     if (!props.trash) {
       void loadOccurrence()
       void loadNext()
+      void loadRules()
     }
   },
   { immediate: true },
@@ -404,6 +527,12 @@ watch(date, () => {
   if (!command.value && task.value.execution_type !== 'one_time') void loadOccurrence()
 })
 onBeforeUnmount(() => {
+  closeMenu()
+  document.removeEventListener('pointerdown', outsideMenu)
+  document.removeEventListener('keydown', menuKey)
+  window.removeEventListener('resize', positionMenu)
+  document.removeEventListener('scroll', positionMenu, true)
+  window.visualViewport?.removeEventListener('resize', positionMenu)
   emit('pendingCommand', false)
   readSequence++
   nextSequence++
@@ -414,160 +543,148 @@ onBeforeUnmount(() => {
 
 <template>
   <article
-    class="task-card"
+    class="task-card task-card--v2"
     :class="{
       'task-card--compact': compact,
       'task-card--expanded': expanded,
       'task-card--widget': widgetCompact,
     }"
   >
-    <div v-if="widgetCompact" class="task-widget-primary">
-      <button
-        class="task-widget-title"
-        type="button"
-        :title="task.title"
-        :aria-label="`Detalii: ${task.title}`"
-        @click="widgetDetails && (widgetDetails.open = !widgetDetails.open)"
-      >
-        {{ task.title }}
-      </button>
-      <button
-        v-if="activeProject && !trash && !command"
-        class="task-widget-icon"
-        type="button"
-        :disabled="disabled"
-        :aria-label="`Adaugă notă pentru ${task.title}`"
-        title="Adaugă notă"
-        @click="emit('progress', task, props.selectedDate ?? date)"
-      >
-        <PencilIcon />
-      </button>
-      <button
-        v-if="
-          activeProject &&
-          !trash &&
-          !command &&
-          canExecute &&
-          (!occurrence || occurrence.status !== 'done')
-        "
-        class="task-widget-icon task-widget-icon--done"
-        type="button"
-        :disabled="disabled"
-        :aria-label="`Finalizează ${task.title}`"
-        title="Finalizează"
-        @click="execute('done')"
-      >
-        <span aria-hidden="true">✓</span>
-      </button>
-      <button
-        class="task-widget-icon"
-        type="button"
-        aria-label="Detalii și acțiuni task"
-        title="Detalii și acțiuni"
-        :aria-expanded="expanded"
-        @click="widgetDetails && (widgetDetails.open = !widgetDetails.open)"
-      >
-        ⋯
-      </button>
-    </div>
-    <slot v-if="widgetCompact" name="widget-meta" />
-    <div v-if="!widgetCompact" class="task-card__heading">
-      <strong :title="task.title">{{ task.title }}</strong
-      ><span class="task-priority" :class="`task-priority--${task.priority}`">{{
-        taskPriorities[task.priority]
-      }}</span>
-    </div>
-    <p v-if="overdue && (!compact || expanded)" class="task-overdue">Restant</p>
-    <div
-      v-if="!widgetCompact && (!compact || task.scheduled_date || task.due_date)"
-      class="task-meta"
-    >
-      <span v-if="!compact || task.scheduled_date"
-        >Programat: {{ displayDate(task.scheduled_date, task.scheduled_time) }}</span
-      ><span v-if="!compact || task.due_date"
-        >Termen: {{ displayDate(task.due_date, task.due_time) }}</span
-      >
-    </div>
-    <p v-if="task.status !== 'active' && (!compact || expanded)" class="projects-muted">
-      {{ task.status === 'archived' ? 'Arhivat' : 'Finalizat' }}
-    </p>
-    <template v-if="!trash">
-      <p
-        v-if="task.execution_type === 'recurring' && (!compact || expanded)"
-        class="projects-muted"
-      >
-        {{
-          nextError ||
-          (next
-            ? `Următoarea: ${displayDate(next.scheduled_date, next.scheduled_time)}`
-            : nextLoaded
-              ? 'Nicio execuție programată de făcut în următoarele 366 de zile.'
-              : 'Se caută următoarea execuție…')
-        }}
-      </p>
-      <p v-if="loading" role="status" class="projects-muted">Se încarcă starea…</p>
-      <p
-        v-else-if="!widgetCompact || executionError || !eligible || occurrence?.status === 'done'"
-        class="task-state"
-      >
-        {{
-          executionError ||
-          (occurrence
-            ? occurrence.status === 'done'
-              ? 'Finalizat'
-              : taskStates[occurrence.status]
-            : eligible
-              ? 'De făcut'
-              : 'Fără execuție eligibilă')
-        }}
-      </p>
-      <div
-        v-if="activeProject && !command && !widgetCompact"
-        class="task-buttons task-card-actions"
-      >
+    <div class="task-card__information">
+      <div class="task-card__topline">
         <button
-          class="task-quick task-quick--note"
+          class="task-card__title"
           type="button"
-          :disabled="disabled"
-          @click="emit('progress', task, props.selectedDate ?? date)"
+          :title="task.title"
+          :aria-label="`Detalii: ${task.title}`"
+          :aria-expanded="expanded"
+          :aria-controls="detailsId"
+          @click="widgetDetails && (widgetDetails.open = !widgetDetails.open)"
         >
-          <PencilIcon aria-hidden="true" /> Notă
+          {{ task.title }}
         </button>
-        <template v-if="canExecute">
-          <button
-            v-if="!occurrence || occurrence.status !== 'done'"
-            class="task-quick task-quick--done"
-            type="button"
-            :disabled="disabled"
-            @click="execute('done')"
+        <span
+          class="task-card__priority"
+          :aria-label="`Prioritate: ${taskPriorities[task.priority]}`"
+        >
+          {{ taskPriorities[task.priority] }}
+        </span>
+        <details
+          v-if="canManage && !trash"
+          ref="actionMenu"
+          class="task-card__menu"
+          @toggle="menuOpen = ($event.target as HTMLDetailsElement).open"
+        >
+          <summary
+            class="task-widget-icon"
+            :aria-label="`Acțiuni pentru ${task.title}`"
+            title="Acțiuni task"
+            @keydown.enter.prevent="keyboardMenu"
+            @keydown.space.prevent="keyboardMenu"
+            @keydown.down.prevent="keyboardMenu"
           >
-            {{ doneLabel }}
-          </button>
-          <button
-            v-if="occurrence && occurrence.status !== 'pending'"
-            class="task-quick"
-            type="button"
-            :disabled="disabled"
-            @click="execute('undo')"
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <circle cx="12" cy="5" r="1.8" />
+              <circle cx="12" cy="12" r="1.8" />
+              <circle cx="12" cy="19" r="1.8" />
+            </svg>
+          </summary>
+        </details>
+      </div>
+      <div class="task-card__timing">
+        <span class="task-card__date" :class="{ 'task-card__date--overdue': overdue }">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            aria-hidden="true"
           >
-            Undo
-          </button>
-          <button
-            v-if="
-              task.status === 'active' &&
-              (!occurrence || occurrence.status === 'pending') &&
-              (!compact || expanded)
-            "
-            class="task-quick"
-            type="button"
-            :disabled="disabled"
-            @click="execute('skip')"
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M16 3v4M8 3v4M3 11h18" />
+          </svg>
+          {{ displayDate(occurrenceDate, occurrence?.scheduled_time ?? task.scheduled_time) }}
+          <span v-if="overdue">· Restant</span>
+        </span>
+        <template v-if="task.execution_type === 'recurring'">
+          <span aria-hidden="true">·</span>
+          <span
+            class="task-card__recurrence"
+            :title="displayedRule ? scheduleLabel(displayedRule) : recurrenceLabel"
           >
-            Skip
-          </button>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              aria-hidden="true"
+            >
+              <path
+                d="m17 2 4 4-4 4M3 11V8a2 2 0 0 1 2-2h16M7 22l-4-4 4-4m14-1v3a2 2 0 0 1-2 2H3"
+              />
+            </svg>
+            {{ recurrenceLabel }}
+          </span>
         </template>
       </div>
-    </template>
+      <slot v-if="widgetCompact" name="widget-meta" />
+    </div>
+    <div v-if="!trash" class="task-card__primary-actions">
+      <ProjectTaskReviews
+        :project="project"
+        :task="task"
+        :occurrence-key="key"
+        :status="shownStatus"
+        :date="date"
+        :timezone="timezone"
+        :disabled="disabled || loading || Boolean(command)"
+        @busy="setBusy"
+        @changed="emit('changed')"
+        @access-changed="emit('accessChanged')"
+      />
+      <TaskOccurrenceStatusControl
+        :status="shownStatus"
+        :label="`Status pentru ${task.title}`"
+        :disabled="disabled || !canExecute || Boolean(command)"
+        :aria-busy="loading || busy"
+        @change="execute"
+      />
+    </div>
+    <p v-if="executionError" class="projects-error" role="alert">{{ executionError }}</p>
+    <p v-else-if="!trash && !loading && !eligible" class="projects-muted">
+      Fără execuție eligibilă
+    </p>
+    <Teleport to="body">
+      <div
+        v-if="menuOpen && canManage && !trash"
+        ref="menuPanel"
+        class="task-card__menu-items"
+        :style="menuStyle"
+        role="group"
+        :aria-label="`Acțiuni pentru ${task.title}`"
+      >
+        <button
+          type="button"
+          class="task-quick"
+          :disabled="disabled || Boolean(command)"
+          @click="editFromMenu"
+        >
+          Editează taskul
+        </button>
+        <button
+          type="button"
+          class="task-quick task-quick--danger"
+          :disabled="disabled || Boolean(command)"
+          @click="deleteFromMenu"
+        >
+          Șterge taskul
+        </button>
+      </div>
+    </Teleport>
     <div v-if="error" class="projects-error" role="alert">
       <p>{{ error }}</p>
       <button
@@ -589,18 +706,29 @@ onBeforeUnmount(() => {
     >
       Reîncearcă {{ command.action }} · {{ command.key }}
     </button>
-    <details ref="widgetDetails" @toggle="toggle">
-      <summary v-show="!widgetCompact" aria-label="Detalii și acțiuni">
-        {{ compact ? '•••' : 'Detalii și acțiuni' }}
-      </summary>
+    <details :id="detailsId" ref="widgetDetails" class="task-card__details" @toggle="toggle">
+      <summary v-show="false">Detalii și istoric</summary>
       <div class="task-details">
-        <div v-if="widgetCompact" class="task-meta">
+        <div class="task-meta">
           <span>Programat: {{ displayDate(task.scheduled_date, task.scheduled_time) }}</span>
           <span
             v-if="task.due_date !== task.scheduled_date || task.due_time !== task.scheduled_time"
             >Termen: {{ displayDate(task.due_date, task.due_time) }}</span
           >
         </div>
+        <p v-if="task.status !== 'active'" class="projects-muted">
+          {{ task.status === 'archived' ? 'Arhivat' : 'Finalizat' }}
+        </p>
+        <p v-if="task.execution_type === 'recurring' && !trash" class="projects-muted">
+          {{
+            nextError ||
+            (next
+              ? `Următoarea: ${displayDate(next.scheduled_date, next.scheduled_time)}`
+              : nextLoaded
+                ? 'Nicio execuție programată de făcut în următoarele 366 de zile.'
+                : 'Se caută următoarea execuție…')
+          }}
+        </p>
         <p v-if="!trash" class="projects-muted">
           {{ task.execution_type === 'one_time' ? 'Execuție unică' : displayDate(date) }} ·
           {{
@@ -684,14 +812,6 @@ onBeforeUnmount(() => {
           >
           <template v-else>
             <button
-              class="task-quick"
-              type="button"
-              :disabled="disabled || Boolean(command)"
-              @click="editing = !editing"
-            >
-              Editează
-            </button>
-            <button
               v-if="task.status !== 'archived'"
               class="task-quick"
               type="button"
@@ -718,20 +838,13 @@ onBeforeUnmount(() => {
             >
               Finalizează definitiv
             </button>
-            <button
-              class="task-quick task-quick--danger"
-              type="button"
-              :disabled="disabled || Boolean(command)"
-              @click="manage('delete')"
-            >
-              Șterge
-            </button>
           </template>
         </div>
         <ProjectTaskForm
           v-if="editing && canManage && !trash"
           :project="project"
           :task="task"
+          :occurrence-date="date"
           @busy="setBusy"
           @cancel="editing = false"
           @changed="emit('changed')"
@@ -779,8 +892,17 @@ onBeforeUnmount(() => {
           </p>
           <ul>
             <li v-for="event in history" :key="event.id">
-              <strong>{{ event.action }}</strong> · {{ displayDate(event.performed_on) }} ·
-              {{ event.actor_id === auth.user?.id ? 'Tu' : `Utilizator #${event.actor_id}` }}
+              <strong
+                >{{ taskStates[event.previous_status] }} →
+                {{ taskStates[event.new_status] }}</strong
+              >
+              · {{ displayDate(event.performed_on) }} ·
+              {{
+                event.actor_id === auth.user?.id
+                  ? 'Tu'
+                  : (event.actor?.username ?? `Utilizator #${event.actor_id}`)
+              }}
+              · {{ new Date(event.recorded_at).toLocaleString('ro-RO') }}
             </li>
           </ul>
           <AppButton
@@ -797,58 +919,141 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.task-card--widget {
-  min-width: 0;
-}
-.task-widget-primary {
-  display: flex;
-  align-items: center;
-  min-width: 0;
+.task-card.task-card--v2 {
+  grid-template-columns: minmax(0, 1fr);
   gap: 0;
+  min-height: 0;
+  padding: 12px;
+  opacity: 1;
 }
-.task-widget-title {
+.task-card__information {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.task-card__topline {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+.task-card__title {
   flex: 1;
   min-width: 0;
   min-height: 44px;
-  padding: 4px 0;
+  padding: 2px 0;
   border: 0;
   background: transparent;
   color: var(--color-text);
   text-align: left;
   font: inherit;
+  font-size: 0.9rem;
   font-weight: 650;
-  font-size: 0.85rem;
-  white-space: nowrap;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   cursor: pointer;
 }
-.task-widget-icon {
-  display: inline-flex;
-  flex: 0 0 44px;
-  align-items: center;
-  justify-content: center;
+.task-card__priority {
+  flex: none;
+  margin-top: 8px;
+  padding: 3px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-soft);
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+.task-card__menu {
+  flex: none;
+  min-width: 0;
+}
+.task-card__menu > summary.task-widget-icon {
+  position: static;
+  display: grid;
+  place-items: center;
   width: 44px;
   height: 44px;
   padding: 0;
   border: 0;
   border-radius: var(--radius-sm);
+  list-style: none;
   background: transparent;
-  color: var(--color-primary-strong);
-  font: inherit;
-  font-size: 1.2rem;
+  color: var(--color-text-muted);
   cursor: pointer;
 }
-.task-widget-icon--done {
-  color: var(--color-primary);
-  font-weight: 800;
+.task-card__menu > summary::-webkit-details-marker {
+  display: none;
 }
-.task-widget-icon:disabled {
-  opacity: 0.45;
-  cursor: default;
+.task-card__timing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+  padding-bottom: 8px;
+  color: var(--color-text-muted);
+  font-size: 0.73rem;
 }
-.task-widget-title:focus-visible,
-.task-widget-icon:focus-visible {
+.task-card__date,
+.task-card__recurrence {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.task-card__timing svg {
+  flex: none;
+}
+.task-card__date--overdue {
+  color: var(--color-error);
+}
+.task-card__primary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  border-top: 1px solid var(--color-border);
+  padding-top: 6px;
+}
+.task-card__primary-actions :deep(.task-status-control) {
+  flex: 0 1 auto;
+}
+.task-card.task-card--v2 > .task-card__details {
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.task-card.task-card--v2 > .task-card__details[open] {
+  border-top: 1px solid var(--color-border);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+.task-card__menu-items {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  gap: 4px;
+  padding: 4px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+.task-card__menu-items button {
+  justify-content: flex-start;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.task-card__title:focus-visible,
+.task-card__menu > summary:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: -2px;
 }

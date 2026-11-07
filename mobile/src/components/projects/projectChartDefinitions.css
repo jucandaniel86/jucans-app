@@ -1,0 +1,193 @@
+.chart-config,
+.chart-config-form,
+.chart-config-fields,
+.configured-charts {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.chart-config-heading,
+.configured-chart-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.chart-config h2,
+.chart-config h3,
+.configured-charts h3 {
+  margin: 0;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+.chart-config .app-button {
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+}
+.chart-config-fields {
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+.chart-config-form {
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+.chart-config-row,
+.configured-chart-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.chart-config-fields label,
+.configured-chart-range label,
+.configured-chart-point {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+.chart-config-fields .chart-config-check {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-height: 44px;
+  gap: 8px;
+  font-weight: 500;
+}
+.chart-config-check input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-primary-strong);
+}
+.chart-config-check small {
+  color: var(--color-text-muted);
+}
+.chart-config input:not([type='checkbox']),
+.configured-charts input,
+.configured-charts select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px;
+  font: inherit;
+  font-size: 16px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.chart-config-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: 8px;
+  border-bottom: 1px solid var(--color-border);
+  min-width: 0;
+}
+.chart-config-item > div:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.chart-config-item p {
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+  margin: 4px 0 0;
+}
+.chart-config-item .task-buttons {
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+.chart-config-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-primary-strong);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+.configured-chart {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.configured-chart-heading h3 {
+  min-width: 0;
+}
+.configured-chart-group {
+  max-width: 120px;
+  flex-shrink: 0;
+}
+.configured-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 0.76rem;
+}
+.configured-chart-legend span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.configured-chart i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.configured-chart-segments {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.8rem;
+}
+.configured-chart-segments > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  justify-content: space-between;
+}
+.configured-chart-segments dt {
+  overflow-wrap: anywhere;
+}
+.configured-chart-segments dd {
+  margin: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.configured-chart-segments small {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+.configured-chart-pie {
+  display: block;
+  width: 180px;
+  max-width: 100%;
+  justify-self: center;
+}
+.configured-chart-total {
+  margin: 0;
+  font-size: 0.85rem;
+}
+.chart-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

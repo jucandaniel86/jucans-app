@@ -10,6 +10,7 @@ export interface ProjectTask {
   title: string
   description: string | null
   execution_type: ProjectExecutionType
+  review_mode?: 'single' | 'multiple'
   priority: TaskPriority
   status: ProjectStatus
   scheduled_date: string | null
@@ -23,6 +24,7 @@ export interface TaskPayload {
   title: string
   description: string | null
   execution_type?: ProjectExecutionType
+  review_mode?: 'single' | 'multiple'
   priority: TaskPriority
   scheduled_date: string | null
   scheduled_time: string | null
@@ -60,6 +62,9 @@ export interface TaskSchedule extends TaskSchedulePayload {
   effective_until: string | null
 }
 export interface TaskCompletionEvent {
+  previous_status: TaskOccurrence['status']
+  new_status: TaskOccurrence['status']
+  actor?: { id: number; username: string }
   id: number
   action: ExecutionAction
   actor_id: number

@@ -170,18 +170,21 @@ onBeforeUnmount(() => {
           v-if="project.status === 'active' && !trash"
           :disabled="locked"
           :aria-expanded="creating"
+          aria-label="Adaugă task"
+          title="Adaugă task"
           @click="creating = !creating"
-          ><PlusIcon aria-hidden="true" /> Adaugă task</AppButton
-        >
+          ><PlusIcon aria-hidden="true"
+        /></AppButton>
         <button
           class="task-quick"
           type="button"
           :disabled="locked"
           :aria-pressed="trash"
+          :aria-label="trash ? 'Înapoi la taskuri' : 'Trash'"
+          :title="trash ? 'Înapoi la taskuri' : 'Trash'"
           @click="switchTrash"
         >
-          <TrashIcon v-if="!trash" />
-          {{ trash ? '‹ Taskuri' : 'Trash' }}
+          <TrashIcon />
         </button>
       </div>
     </Teleport>

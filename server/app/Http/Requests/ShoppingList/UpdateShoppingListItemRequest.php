@@ -36,6 +36,7 @@ class UpdateShoppingListItemRequest extends FormRequest
             'is_checked' => ['sometimes', 'boolean'],
             'name' => ['sometimes', 'required', 'string'],
             'quantity' => ['sometimes', 'nullable', 'numeric'],
+            'shopping_category_id' => ['sometimes', 'nullable', 'integer', 'exists:shopping_categories,id'],
             'unit' => ['sometimes', 'nullable', 'string'],
             'reset_quantity' => ['sometimes', 'boolean'],
         ];
@@ -44,7 +45,7 @@ class UpdateShoppingListItemRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator): void {
-            if (! $this->hasAny(['is_checked', 'name', 'quantity', 'unit', 'reset_quantity'])) {
+            if (! $this->hasAny(['is_checked', 'name', 'quantity', 'unit', 'shopping_category_id', 'reset_quantity'])) {
                 $validator->errors()->add('item', 'At least one item field must be provided.');
             }
         });

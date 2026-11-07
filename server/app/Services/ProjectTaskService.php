@@ -44,6 +44,7 @@ class ProjectTaskService
             Gate::forUser($user)->authorize('update', $task);
             $task->fill($this->normalizeTimes($attributes));
             $this->validateCalendarFields($task);
+            app(ProjectTaskReviewService::class)->changeMode($task);
             $hasOccurrences = $task->occurrences()->exists();
             abort_if($task->isDirty('execution_type') && ($hasOccurrences || $task->scheduleVersions()->exists()), 409, 'Execution type cannot change after occurrences or schedule history exist.');
             if ($task->execution_type === ProjectTaskExecutionType::ONE_TIME && ($task->isDirty('status') || $task->isDirty('execution_type'))) {

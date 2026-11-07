@@ -12,6 +12,19 @@ import type {
 const root = (project: number) => `/projects/${project}`
 const evaluations = (project: number, task: number) => `${root(project)}/tasks/${task}/evaluations`
 export const projectProgressApi = {
+  reviews(
+    project: number,
+    task: number,
+    key: string,
+    page = 1,
+  ): Promise<
+    ProgressPage<ProgressNote> & {
+      review_context: { mode: 'single' | 'multiple'; can_create: boolean }
+    }
+  > {
+    const query = new URLSearchParams({ occurrence_key: key, page: String(page) })
+    return api.get(`${root(project)}/tasks/${task}/reviews?${query}`)
+  },
   notes(
     project: number,
     filters: NoteFilters = {},

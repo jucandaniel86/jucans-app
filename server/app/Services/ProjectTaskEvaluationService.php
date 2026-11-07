@@ -68,7 +68,9 @@ class ProjectTaskEvaluationService
     private function validateNote(User $user, Project $project, ProjectTask $task, ?int $noteId): void
     {
         if ($noteId !== null && ! ProjectProgressNote::query()->where('project_id', $project->id)->whereKey($noteId)
-            ->visibleTo($user)->whereHas('tasks', fn ($query) => $query->where('project_tasks.id', $task->id))->exists()) {
+            ->visibleTo($user)
+            ->where(fn ($query) => $query->whereDoesntHave('review')->orWhere('created_by', $user->id))
+            ->whereHas('tasks', fn ($query) => $query->where('project_tasks.id', $task->id))->exists()) {
             throw ValidationException::withMessages(['note_id' => 'The note must be visible, active, and associated with this task in the same project.']);
         }
     }

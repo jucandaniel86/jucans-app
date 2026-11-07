@@ -54,10 +54,9 @@ class ProjectTaskExecutionService
                 }
             }
             $single = $task->execution_type === ProjectTaskExecutionType::ONE_TIME;
-            // Undo is the necessary exception to the automatically completed one-time task.
+            // Any occurrence transition is allowed for an automatically completed one-time task.
             $completedSingle = $single && $occurrence?->status === ProjectTaskOccurrenceStatus::DONE;
-            abort_unless($task->status === ProjectStatus::ACTIVE || ($completedSingle
-                && in_array($action, [ProjectTaskCompletionAction::DONE, ProjectTaskCompletionAction::UNDO], true)), 403, 'This task is not active.');
+            abort_unless($task->status === ProjectStatus::ACTIVE || $completedSingle, 403, 'This task is not active.');
             $current = $occurrence?->status ?? ProjectTaskOccurrenceStatus::PENDING;
             $version = $occurrence?->lock_version ?? 0;
             $target = $action->targetStatus();

@@ -10,7 +10,12 @@ import { projectProgressApi } from '@/services/projectProgressApi'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notifications'
 import type { Project } from '@/types/projects'
-import type { NoteFieldEntry, NoteTask, ProgressNote } from '@/types/projectProgress'
+import type {
+  NoteFieldEntry,
+  NoteTask,
+  ProgressNote,
+  TaskReviewContext,
+} from '@/types/projectProgress'
 import {
   notePayload,
   progressError,
@@ -26,6 +31,7 @@ const props = withDefaults(
     note?: ProgressNote
     initialTasks?: NoteTask[]
     initialDate?: string
+    reviewContext?: TaskReviewContext
     timezone?: string
   }>(),
   { timezone: 'UTC', initialTasks: () => [] },
@@ -80,7 +86,7 @@ const canManage = computed(
     props.project.status === 'active' &&
     (!initial ||
       initial.created_by === auth.user?.id ||
-      props.project.created_by === auth.user?.id),
+      (!initial.review && props.project.created_by === auth.user?.id)),
 )
 const frozen = computed(
   () => busy.value || state.noteSaved || unknownCreation.value || !canManage.value,
@@ -435,6 +441,10 @@ async function save(): Promise<void> {
       form.noted_at,
       unchanged ? undefined : ids,
     )
+    if (!initial && props.reviewContext) {
+      payload.review_task_id = props.reviewContext.task_id
+      payload.review_occurrence_key = props.reviewContext.occurrence_key
+    }
     submittedValues = configuration.entries()
     if ((!initial || assigningType.value) && typeId.value !== null) {
       payload.note_type_id = typeId.value
@@ -470,7 +480,9 @@ async function save(): Promise<void> {
     const message =
       failure instanceof ApiError
         ? failure.status === 409 && !state.noteSaved
-          ? `Configurația s-a schimbat. ${failure.message}`
+          ? props.reviewContext
+            ? 'Review-ul nu mai poate fi creat: locul este ocupat, apariția este De făcut sau taskul este inactiv. Închide formularul și reîncarcă review-urile.'
+            : `Configurația s-a schimbat. ${failure.message}`
           : progressError(failure)
         : failure instanceof Error
           ? failure.message
@@ -711,6 +723,7 @@ defineExpose({ save, dirty, busy, saveLabel, saveDisabled, closeMessage })
           </h3>
         </div>
         <ProjectTaskPicker
+          v-if="!reviewContext && !initial?.review"
           v-model="selected"
           :project-id="project.id"
           multiple

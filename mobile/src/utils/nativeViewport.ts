@@ -4,6 +4,8 @@ export function configureNativeViewport(): void {
   // Android manages its own WebView insets; leave its viewport policy unchanged.
   if (Capacitor.getPlatform() !== 'ios') return
 
+  document.documentElement.classList.add('native-ios')
+
   const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]')
   if (!viewport) return
 

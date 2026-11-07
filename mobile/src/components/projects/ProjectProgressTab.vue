@@ -67,7 +67,7 @@ const grouped = computed(() => {
   return [...groups].map(([date, notes]) => ({ date, notes }))
 })
 const canManage = (note: ProgressNote) =>
-  active.value && (owner.value || note.created_by === auth.user?.id)
+  active.value && (note.created_by === auth.user?.id || (!note.review && owner.value))
 function busy(value: boolean): void {
   busyCount.value = Math.max(0, busyCount.value + (value ? 1 : -1))
   emit('busy', locked.value)
@@ -316,7 +316,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <p class="projects-muted progress-note__metadata">
-            {{ progressAuthor(note.created_by, project, auth.user)
+            {{ note.author?.username ?? progressAuthor(note.created_by, project, auth.user)
             }}<template v-if="!dateInGeneratedTitle(note)">
               · {{ displayDate(note.noted_at) }}</template
             >
@@ -358,7 +358,7 @@ onBeforeUnmount(() => {
             :task-deleted="
               Boolean(note.tasks.find((task) => task.id === score.task_id)?.deleted_at)
             "
-            :locked="locked"
+            :locked="locked || Boolean(note.review && note.created_by !== auth.user?.id)"
             @busy="busy"
             @changed="changed"
             @access-changed="emit('accessChanged')"

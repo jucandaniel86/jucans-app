@@ -69,7 +69,13 @@ export interface NoteCurrentState {
     options: { id: number; archived_at: string | null }[]
   }[]
 }
+export interface TaskReviewContext {
+  task_id: number
+  occurrence_key: string
+}
 export interface ProgressNote {
+  review?: (TaskReviewContext & { user_id: number }) | null
+  author?: { id: number; username: string }
   id: number
   project_id: number
   created_by: number
@@ -77,6 +83,8 @@ export interface ProgressNote {
   title: string
   content: string
   noted_at: string
+  created_at?: string | null
+  updated_at?: string | null
   task_ids: number[]
   tasks: NoteTask[]
   evaluations: TaskEvaluation[]
@@ -97,6 +105,8 @@ export interface EvaluationRevision {
   recorded_at: string
 }
 export interface NotePayload {
+  review_task_id?: number
+  review_occurrence_key?: string
   note_type_id?: number | null
   values?: NoteFieldEntry[]
   title: string

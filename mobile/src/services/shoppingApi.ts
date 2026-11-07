@@ -1,9 +1,10 @@
 import { api } from '@/services/api'
-import type { ResourceItem } from '@/types/food'
+import type { ResourceItem, ShoppingCategory } from '@/types/food'
 import type {
   ActiveShoppingList,
   ShoppingRecipeResult,
   ShoppingItem,
+  ShoppingItemSuggestion,
   ShoppingListsResponse,
   ShoppingListSummary,
   ManualShoppingItemInput,
@@ -14,6 +15,12 @@ import type {
 } from '@/types/shopping'
 
 export const shoppingApi = {
+  suggestions(query: string): Promise<{ data: ShoppingItemSuggestion[] }> {
+    return api.get(`/shopping-items/suggestions?query=${encodeURIComponent(query)}`)
+  },
+  categories(): Promise<{ data: ShoppingCategory[] }> {
+    return api.get('/shopping-categories')
+  },
   getOpen(): Promise<{ data: ShoppingListSummary[] }> {
     return api.get('/shopping-lists/open')
   },

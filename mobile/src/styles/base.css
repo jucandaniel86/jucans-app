@@ -37,6 +37,25 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* WKWebView: suppress double-tap zoom while retaining panning and pinch zoom.
+   Cover both page content and controls inside independently scrolling panels. */
+html.native-ios,
+html.native-ios
+  :is(
+    button,
+    a[href],
+    input,
+    textarea,
+    select,
+    label,
+    summary,
+    [role='button'],
+    [role='link'],
+    [role='tab']
+  ) {
+  touch-action: manipulation;
+}
+
 /* Keep controls >=16px before focus, including scoped/lazy forms and native selects.
    Do not gate this on platform detection or restrict the viewport's user zoom. */
 input,

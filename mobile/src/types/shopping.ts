@@ -36,13 +36,22 @@ export interface ShoppingItem {
   sources?: { id: number; recipe_id: number; quantity: string | null; unit: string | null }[]
 }
 
+export interface ShoppingItemSuggestion {
+  name: string
+  unit: string | null
+  category: ShoppingCategory | null
+  source: 'ingredients' | 'shopping_list_items'
+}
+
 export interface ManualShoppingItemInput {
   name: string
+  shopping_category_id?: number | null
   quantity: number | null
   unit: string | null
 }
 
 export interface ShoppingItemUpdateInput {
+  shopping_category_id?: number | null
   is_checked?: boolean
   name?: string
   quantity?: number | null

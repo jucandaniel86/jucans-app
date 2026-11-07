@@ -20,11 +20,11 @@ class ProjectTask extends Model
     protected $dateFormat = 'Y-m-d H:i:s.u';
 
     protected $fillable = [
-        'title', 'description', 'execution_type', 'priority', 'status',
+        'title', 'description', 'execution_type', 'priority', 'status', 'review_mode',
         'scheduled_date', 'scheduled_time', 'due_date', 'due_time', 'show_in_daily_widget',
     ];
 
-    protected $attributes = ['priority' => 'medium', 'status' => 'active', 'show_in_daily_widget' => true];
+    protected $attributes = ['review_mode' => 'single', 'priority' => 'medium', 'status' => 'active', 'show_in_daily_widget' => true];
 
     protected $casts = [
         'execution_type' => ProjectTaskExecutionType::class,

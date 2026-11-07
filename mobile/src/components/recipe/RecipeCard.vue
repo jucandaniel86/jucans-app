@@ -26,7 +26,11 @@ const authStore = useAuthStore()
 const { adding, addToList } = useAddRecipeToShoppingList(() => props.recipe.id)
 
 function openRecipe(): void {
-  router.push({ name: 'recipe-detail', params: { id: props.recipe.id } })
+  router.push({
+    name: 'recipe-detail',
+    params: { id: props.recipe.id },
+    query: route.name === 'recipes' ? { ...route.query } : undefined,
+  })
 }
 
 function editRecipe(): void {
@@ -70,6 +74,7 @@ function editRecipe(): void {
             query: {
               ...(route.name === 'recipes' ? route.query : {}),
               author_id: String(recipe.author.id),
+              page: undefined,
             },
           }"
           :aria-label="`Vezi rețetele autorului ${recipe.author.name}`"
@@ -234,6 +239,7 @@ function editRecipe(): void {
               query: {
                 ...(route.name === 'recipes' ? route.query : {}),
                 author_id: String(recipe.author.id),
+                page: undefined,
               },
             }"
             :aria-label="`Vezi rețetele autorului ${recipe.author.name}`"

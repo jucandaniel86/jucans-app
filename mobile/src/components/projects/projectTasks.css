@@ -260,7 +260,7 @@
 /* Compact cards reuse all existing execution and management actions. */
 .task-card--compact {
   position: relative;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(1fr, 1fr) auto;
   min-height: 96px;
   gap: 4px 8px;
   padding: 10px;

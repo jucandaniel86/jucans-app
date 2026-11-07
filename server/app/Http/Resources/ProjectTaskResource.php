@@ -16,6 +16,7 @@ class ProjectTaskResource extends JsonResource
             'title' => $this->title,
             'description' => $this->description,
             'execution_type' => $this->execution_type->value,
+            'review_mode' => $this->review_mode,
             'priority' => $this->priority->value,
             'status' => $this->status->value,
             'scheduled_date' => $this->scheduled_date,

@@ -61,6 +61,11 @@ class Project extends Model
         return $this->hasMany(ProjectCustomField::class);
     }
 
+    public function charts(): HasMany
+    {
+        return $this->hasMany(ProjectChart::class)->orderBy('priority')->orderBy('id');
+    }
+
     public function noteTypes(): HasMany
     {
         return $this->hasMany(ProjectNoteType::class);

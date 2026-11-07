@@ -36,6 +36,7 @@ class StoreManualShoppingListItemRequest extends FormRequest
         return [
             'name' => ['required', 'string'],
             'quantity' => ['nullable', 'numeric', 'gt:0'],
+            'shopping_category_id' => ['sometimes', 'nullable', 'integer', 'exists:shopping_categories,id'],
             'unit' => ['nullable', 'string'],
         ];
     }

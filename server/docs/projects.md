@@ -1,5 +1,12 @@
 # Projects specification
 
+Task Reviews (Stage 3) are documented in [task-reviews-stage-3.md](task-reviews-stage-3.md),
+with [manual MySQL SQL](sql/task-reviews-stage-3.sql).
+
+Charts v1 (configured Pie/Line/Bar) is documented in [charts-v1.md](charts-v1.md).
+It supersedes the Phase 2D viewer layout; legacy statistics endpoints remain intact.
+Manual MySQL schema: [sql/project-charts-v1.sql](sql/project-charts-v1.sql).
+
 ## Scope and approved corrections
 
 Phase 1A implements categories, project settings, status history, and listing.
@@ -10,7 +17,7 @@ adds progress notes, evaluations, and note-template previews. Phase 1E adds prog
 aggregation and chart-ready APIs. Phase 2A adds the Projects frontend foundation.
 Phase 2B adds task management/calendar, Phase 2C adds the progress journal and
 evaluations, Phase 2D adds frontend analytics, and Phase 2E adds the Home daily task
-widget. Sharing management UI and bulk actions remain unimplemented.
+widget. Project Edit now includes owner-only sharing management; bulk actions remain unimplemented.
 
 The following rules apply to the overall module and supersede the original
 architecture proposal:
@@ -953,3 +960,65 @@ core execution/recurrence changes, dependencies or deployment. Verification:
 TypeScript, relevant ESLint and Vite build pass; 2 backend tests (52 assertions),
 the new widget test and 3 existing targeted frontend tests pass. No full suite.
 Stop after Phase 2E for iPhone review.
+
+## Project Sharing — Stage 1 UI
+
+Project Edit → General → Share with lists existing users (excluding the owner),
+preselects current collaborators, and saves membership separately via **Salvează
+partajarea**. Newly added members use existing `all_tasks` sharing. Existing
+`selected_tasks` memberships retain their mode/grants and are labeled as restricted.
+No schema changes, notifications, invites, or new roles are introduced.
+
+- New `GET /api/projects/{project}/shareable-users`: owner only, returns only ID and
+  username. Existing owner-only `GET /collaborators` loads current selections.
+- Existing `POST /collaborators` and `DELETE /collaborators/{collaborator}` perform
+  additions/removals under the existing project lock, transaction and manageSharing
+  policy. Inactive projects remain read-only. Removing members deletes only their
+  membership/grants, preserving authorship, tasks, notes, evaluations and history.
+- Membership changes are separate API transactions, not an atomic list replacement.
+  On partial failure the UI reports partial success, reloads membership and retains
+  the desired selection so retry sends only outstanding changes.
+- Existing `accessibleTo` uses owner OR membership through EXISTS, so shared and
+  owned projects appear once in the normal list. Existing task/notes/evaluation
+  policies and visibility scopes remain authoritative. General-note privacy and
+  existing task-author edit permissions remain unchanged. No task statuses change.
+- Project settings/configuration controls are hidden for non-owners, including
+  direct navigation to Project Edit; backend policies remain unchanged.
+
+Manual verification: add two users and save sharing; sign in as a member and open
+Projects, execute an accessible task and add a note; confirm owner-only settings are
+unavailable (including direct API writes); remove a member and confirm project/task/
+note access is revoked while history remains; verify existing restricted grants
+and inactive-project read-only behavior. No automatic tests were created, modified
+or run for this stage.
+
+## Task Status — Stage 2
+
+The compact occurrence selector replaces the primary Done/Undo/Skip buttons in
+Project Calendar, List and Home task cards. Semantic mappings reuse existing data:
+`TO_DO = pending` (De făcut), `DONE = done` (Finalizat),
+`CANNOT_BE_DONE = skipped` (Imposibil / Nu poate fi făcut).
+The selector calls the existing undo/done/skip execution routes with request IDs
+and expected lock versions. Status changes never create, modify or delete notes;
+Add Note remains a separate icon action. Permissions and note privacy are unchanged.
+
+The automatically completed one-time exception now permits direct Done → Skip,
+as well as Done → Undo. Skip restores the one-time definition to active using the
+existing execution semantics; it is not task archival. Recurring/persistent changes
+remain on the selected dated occurrence, without changing schedule versions or
+permanently completing the definition. Existing aggregation treats only Done as
+completed and retains scheduled skipped occurrences in daily denominators.
+
+History reuses append-only `project_task_completion_events`. The history response
+now includes `previous_status`, `new_status` and actor ID/username alongside the
+existing `recorded_at` timestamp. Previous status is reconstructed from the preceding
+event of the same occurrence by ID (or pending before the first event), across the
+entire occurrence history, independently of the requested date window/pagination.
+A correlated indexed subquery plus eager-loaded actors avoids per-event queries.
+No migration, data rewrite or manual SQL is needed.
+
+Manual checks: TO_DO → DONE → CANNOT_BE_DONE → DONE → TO_DO on a one-time task;
+change two dates of a recurring task and confirm independence; repeat as a member;
+verify author, old/new status and timestamp in history; confirm notes remain intact,
+no note is created, and inactive projects/archived tasks remain read-only. No tests
+were created, modified or run for Stage 2.

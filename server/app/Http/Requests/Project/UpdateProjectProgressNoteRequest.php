@@ -16,6 +16,9 @@ class UpdateProjectProgressNoteRequest extends StoreProjectProgressNoteRequest
             $rules[$field] = ['sometimes', ...$rules[$field]];
         }
 
+        $rules['review_task_id'] = ['prohibited'];
+        $rules['review_occurrence_key'] = ['prohibited'];
+
         return $rules;
     }
 }

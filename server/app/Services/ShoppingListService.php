@@ -151,7 +151,14 @@ class ShoppingListService
                 $changes['quantity_overridden'] = true;
             }
 
+            if (array_key_exists('shopping_category_id', $attributes)) {
+                $changes['shopping_category_id'] = $attributes['shopping_category_id'];
+            }
+
             abort_if($changes === [], 422, 'This shopping list item cannot be updated with the provided fields.');
+            if (array_diff(array_keys($changes), ['is_checked']) !== []) {
+                $changes['updated_at'] = now();
+            }
             DB::table('shopping_list_items')->where('id', $item->id)->update($changes);
 
             return $item->refresh()->load(['shoppingCategory', 'sources']);
@@ -216,7 +223,7 @@ class ShoppingListService
                 'calculated_quantity' => null,
                 'quantity' => $attributes['quantity'] ?? null,
                 'unit' => $attributes['unit'] ?? null,
-                'shopping_category_id' => null,
+                'shopping_category_id' => $attributes['shopping_category_id'] ?? null,
                 'is_checked' => false,
                 'quantity_overridden' => true,
             ])->load('shoppingCategory');

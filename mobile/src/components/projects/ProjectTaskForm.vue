@@ -6,6 +6,7 @@ import AppTextarea from '@/components/ui/AppTextarea.vue'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import { ApiError } from '@/services/api'
 import { projectTasksApi } from '@/services/projectTasksApi'
+import { addSavedTaskToPhoneCalendar, phoneCalendarAvailable } from '@/services/taskPhoneCalendar'
 import { useNotificationStore } from '@/stores/notifications'
 import type { Project } from '@/types/projects'
 import type {
@@ -17,7 +18,12 @@ import type {
 } from '@/types/projectTasks'
 import { taskError, taskPriorities, taskTypes, weekdays } from '@/utils/projectTasks'
 
-const props = defineProps<{ project: Project; task?: ProjectTask; initialDate?: string }>()
+const props = defineProps<{
+  project: Project
+  task?: ProjectTask
+  initialDate?: string
+  occurrenceDate?: string
+}>()
 const emit = defineEmits<{
   saved: []
   changed: []
@@ -29,6 +35,8 @@ const notifications = useNotificationStore()
 const initial = props.task
 const record = ref<ProjectTask | null>(initial ?? null)
 const busy = ref(false)
+const addToCalendar = ref(false)
+const calendarAvailable = phoneCalendarAvailable()
 const loading = ref(false)
 const loadFailed = ref(false)
 const error = ref('')
@@ -40,6 +48,7 @@ const form = reactive({
   title: initial?.title ?? '',
   description: initial?.description ?? '',
   execution_type: initial?.execution_type ?? props.project.default_execution_type,
+  review_mode: initial?.review_mode ?? 'single',
   priority: initial?.priority ?? ('medium' as TaskPriority),
   scheduled_date: initial?.scheduled_date ?? props.initialDate ?? '',
   scheduled_time: initial?.scheduled_time ?? '',
@@ -140,6 +149,7 @@ async function save(): Promise<void> {
       title: form.title.trim(),
       description: form.description.trim() || null,
       priority: form.priority,
+      review_mode: form.review_mode,
       scheduled_date: form.scheduled_date || null,
       scheduled_time: form.scheduled_time || null,
       due_date: form.due_date || null,
@@ -181,6 +191,36 @@ async function save(): Promise<void> {
         )
       ).data
       originalSchedule = JSON.stringify(desired)
+    }
+    if (addToCalendar.value) {
+      // Consume this explicit action once, including cancellation/failure. Calendar
+      // errors must never enter the task/recurrence failure handler below.
+      addToCalendar.value = false
+      try {
+        const result = await addSavedTaskToPhoneCalendar(
+          props.project.id,
+          record.value!,
+          props.occurrenceDate,
+        )
+        if (result === 'saved')
+          notifications.success(
+            'Taskul a fost salvat în Jucans și adăugat în calendarul telefonului.',
+          )
+        else if (result === 'cancelled')
+          notifications.info(
+            'Taskul a fost salvat în Jucans. Adăugarea în calendar a fost anulată sau nu a fost confirmată.',
+          )
+        else
+          notifications.info(
+            'Taskul a fost salvat în Jucans. Calendarul nu confirmă salvarea; verifică evenimentul în aplicația de calendar.',
+          )
+      } catch (failure) {
+        const detail = failure instanceof Error ? failure.message : ''
+        notifications.warning(
+          `Taskul a fost salvat în Jucans, dar adăugarea în calendar nu a fost confirmată. ${detail}`.trim(),
+          8000,
+        )
+      }
     }
     emit('saved')
   } catch (failure) {
@@ -238,6 +278,15 @@ onMounted(loadSchedule)
           :disabled="Boolean(initial)"
         /><AppSelect v-model="form.priority" label="Prioritate" :options="priorityOptions" />
       </div>
+      <AppSelect
+        v-model="form.review_mode"
+        label="Review Mode"
+        :options="[
+          { value: 'single', label: 'Single — un review per apariție' },
+          { value: 'multiple', label: 'Multiple — un review per utilizator și apariție' },
+        ]"
+        :error="errors.review_mode?.[0]"
+      />
       <details
         :open="
           Boolean(form.scheduled_date || form.due_date || form.scheduled_time || form.due_time)
@@ -295,6 +344,15 @@ onMounted(loadSchedule)
         ><label>Se termină la (opțional)<input v-model="rule.end_date" type="date" /></label>
       </div>
       <label>Ora recurenței (opțional)<input v-model="rule.scheduled_time" type="time" /></label>
+    </fieldset>
+    <fieldset
+      v-if="calendarAvailable"
+      class="task-fields"
+      :disabled="busy || loading || uncertainCreation"
+    >
+      <label class="task-check">
+        <input v-model="addToCalendar" type="checkbox" /> Adaugă în calendarul telefonului
+      </label>
     </fieldset>
     <div class="task-buttons">
       <AppButton

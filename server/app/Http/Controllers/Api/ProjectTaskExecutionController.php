@@ -81,6 +81,13 @@ class ProjectTaskExecutionController extends Controller
         $input = $request->validated();
 
         return ProjectTaskCompletionEventResource::collection(ProjectTaskCompletionEvent::query()
+            ->select('project_task_completion_events.*')
+            ->selectSub(ProjectTaskCompletionEvent::query()->from('project_task_completion_events as previous_event')
+                ->select('previous_event.action')
+                ->whereColumn('previous_event.occurrence_id', 'project_task_completion_events.occurrence_id')
+                ->whereColumn('previous_event.id', '<', 'project_task_completion_events.id')
+                ->orderByDesc('previous_event.id')->limit(1), 'previous_action')
+            ->with('actor:id,username')
             ->whereHas('occurrence', fn (Builder $query) => $query->where('task_id', $task->id))
             ->whereBetween('performed_on', [$input['from'], $input['to']])
             ->orderBy('performed_on')->orderBy('id')->paginate($input['per_page'] ?? 20)->withQueryString());

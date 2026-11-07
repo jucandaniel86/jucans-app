@@ -5,6 +5,7 @@ namespace App\Policies;
 use App\Enums\ProjectStatus;
 use App\Models\ProjectTask;
 use App\Models\ProjectTaskEvaluation;
+use App\Models\ProjectTaskReview;
 use App\Models\User;
 
 class ProjectTaskEvaluationPolicy
@@ -24,6 +25,7 @@ class ProjectTaskEvaluationPolicy
         return $evaluation->active_slot === 1 && $evaluation->withdrawn_at === null
             && $evaluation->task->project->status === ProjectStatus::ACTIVE
             && ($evaluation->task->project->isOwnedBy($user) || (int) $evaluation->created_by === (int) $user->id)
+            && ! ProjectTaskReview::query()->where('note_id', $evaluation->note_id)->where('user_id', '!=', $user->id)->exists()
             && $this->view($user, $evaluation);
     }
 }

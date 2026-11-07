@@ -223,7 +223,7 @@ watch(
           <template v-else-if="summary">
             <dl class="project-detail__metrics">
               <div>
-                <dt>Taskuri active:</dt>
+                <dt>Active:</dt>
                 <dd>{{ summary.completion.remaining_tasks }}</dd>
               </div>
               <div>
@@ -259,7 +259,6 @@ watch(
         :id="`${panelId}-panel`"
         role="tabpanel"
         :aria-labelledby="`${panelId}-${tab}`"
-        tabindex="0"
       >
         <ProjectTasksTab
           v-if="tab === 'tasks'"
@@ -392,7 +391,7 @@ watch(
 }
 .project-detail__summary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding-block: 4px;
@@ -402,15 +401,15 @@ watch(
   font-size: 0.78rem;
 }
 .project-detail__metrics {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   margin: 0;
 }
 .project-detail__metrics > div {
   display: flex;
-  flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 8px;
+  gap: 4px;
 }
 .project-detail__metrics dt {
   font-size: 0.76rem;
@@ -418,7 +417,7 @@ watch(
 }
 .project-detail__metrics dd {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 0.9rem;
   font-weight: 800;
 }
 .project-detail__counts .projects-text-button {
@@ -430,14 +429,15 @@ watch(
   min-width: 0;
 }
 .project-detail__task-actions :deep(.task-summary-actions) {
-  display: grid;
+  display: flex;
+  flex-wrap: nowrap;
   gap: 4px;
 }
 .project-detail__task-actions :deep(.task-summary-actions > button) {
-  width: 100%;
-  min-width: 0;
+  width: 44px;
+  min-width: 44px;
   min-height: 44px;
-  padding: 6px 8px;
+  padding: 0;
   font-size: 0.77rem;
 }
 .project-detail__task-actions :deep(svg) {
@@ -456,12 +456,6 @@ watch(
 @media (min-width: 600px) {
   .project-detail h1 {
     font-size: 1.5rem;
-  }
-  .project-detail__summary {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 280px);
-  }
-  .project-detail__task-actions :deep(.task-summary-actions) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

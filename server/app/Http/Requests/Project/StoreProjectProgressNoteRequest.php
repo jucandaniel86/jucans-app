@@ -17,6 +17,10 @@ class StoreProjectProgressNoteRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'review_task_id' => ['required_with:review_occurrence_key', 'integer', 'min:1'],
+            'review_occurrence_key' => ['required_with:review_task_id', 'string', 'max:10'],
+            'review' => ['prohibited'],
+            'user_id' => ['prohibited'],
             'note_type_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'values' => ['sometimes', 'array', 'max:1000'],
             'values.*' => ['required', 'array:field_id,value'],

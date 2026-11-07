@@ -5,13 +5,14 @@ import AppButton from '@/components/ui/AppButton.vue'
 import ProjectProgressNoteForm from './ProjectProgressNoteForm.vue'
 import ProgressNoteConfirmDialog from './ProgressNoteConfirmDialog.vue'
 import type { Project } from '@/types/projects'
-import type { NoteTask, ProgressNote } from '@/types/projectProgress'
+import type { NoteTask, ProgressNote, TaskReviewContext } from '@/types/projectProgress'
 
 const props = defineProps<{
   project: Project
   note?: ProgressNote
   initialTasks?: NoteTask[]
   initialDate?: string
+  reviewContext?: TaskReviewContext
   timezone?: string
 }>()
 const emit = defineEmits<{
@@ -141,7 +142,17 @@ defineExpose({ requestClose })
           >
             ×
           </button>
-          <h2 :id="titleId">{{ note ? 'Editează nota' : 'Adaugă notă' }}</h2>
+          <h2 :id="titleId">
+            {{
+              note?.review || reviewContext
+                ? note
+                  ? 'Editează review'
+                  : 'Adaugă review'
+                : note
+                  ? 'Editează nota'
+                  : 'Adaugă notă'
+            }}
+          </h2>
           <AppButton
             class="note-editor-header-save"
             :loading="saving"

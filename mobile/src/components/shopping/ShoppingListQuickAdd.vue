@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { nextTick, ref, useId } from 'vue'
+import ShoppingProductInput from './ShoppingProductInput.vue'
+import ShoppingCategorySelect from './ShoppingCategorySelect.vue'
+import type { ShoppingItemSuggestion } from '@/types/shopping'
 import AppButton from '@/components/ui/AppButton.vue'
 import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
 import { useNotificationStore } from '@/stores/notifications'
@@ -13,9 +16,15 @@ const expanded = ref(false)
 const name = ref('')
 const quantity = ref('')
 const unit = ref('')
+const category = ref<number | null>(null)
 const error = ref('')
-const nameInput = ref<HTMLInputElement | null>(null)
+const nameInput = ref<InstanceType<typeof ShoppingProductInput> | null>(null)
 const action = ref<HTMLButtonElement | null>(null)
+
+function selectSuggestion(value: ShoppingItemSuggestion): void {
+  unit.value = value.unit ?? ''
+  category.value = value.category?.id ?? null
+}
 
 async function open(): Promise<void> {
   expanded.value = true
@@ -48,16 +57,23 @@ async function save(): Promise<void> {
       name: name.value.trim(),
       quantity: amount,
       unit: unit.value.trim() || null,
+      shopping_category_id: category.value,
     })
     name.value = ''
     quantity.value = ''
     unit.value = ''
+    category.value = null
     await collapse()
     notifications.success('Produsul a fost adăugat.')
   } catch (failure) {
-    if (failure instanceof ApiError && failure.status === 422 &&
-      Object.keys(failure.errors).some((field) => ['name', 'quantity', 'unit'].includes(field))) {
-      error.value = 'Verifică produsul, cantitatea și unitatea.'
+    if (
+      failure instanceof ApiError &&
+      failure.status === 422 &&
+      Object.keys(failure.errors).some((field) =>
+        ['name', 'quantity', 'unit', 'shopping_category_id'].includes(field),
+      )
+    ) {
+      error.value = 'Verifică produsul, cantitatea, unitatea și categoria.'
       return
     }
     notifications.error(
@@ -95,17 +111,15 @@ async function save(): Promise<void> {
         </button>
       </div>
       <fieldset :disabled="shopping.addingItem || shopping.closing">
-        <label class="shopping-quick-add__name" :for="`${id}-name`"
-          >Produs
-          <input
-            :id="`${id}-name`"
+        <div class="shopping-quick-add__name">
+          <ShoppingProductInput
             ref="nameInput"
             v-model="name"
-            name="name"
             required
-            autocomplete="off"
+            :disabled="shopping.addingItem || shopping.closing"
+            @select="selectSuggestion"
           />
-        </label>
+        </div>
         <label :for="`${id}-quantity`"
           >Cantitate
           <input
@@ -126,6 +140,10 @@ async function save(): Promise<void> {
             enterkeyhint="done"
           />
         </label>
+        <ShoppingCategorySelect
+          v-model="category"
+          :disabled="shopping.addingItem || shopping.closing"
+        />
         <AppButton type="submit" :loading="shopping.addingItem" :disabled="!name.trim()"
           >Salvează</AppButton
         >

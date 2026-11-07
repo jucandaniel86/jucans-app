@@ -1,12 +1,30 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { ProgressNote } from '@/types/projectProgress'
 import { projectIcon } from '@/utils/projectPresentation'
 import { displayNoteValue } from '@/utils/progressNoteFields'
-defineProps<{ note: ProgressNote }>()
+const props = withDefaults(defineProps<{ note: ProgressNote; expanded?: boolean }>(), {
+  expanded: false,
+})
+const fields = computed(() =>
+  (props.note.configuration?.fields ?? []).filter((field) => {
+    if (!props.expanded) return true
+    const value = props.note.values?.find((entry) => entry.field_id === field.field_id)?.value
+    return value !== undefined && value !== null && value !== ''
+  }),
+)
 </script>
 <template>
-  <details v-if="note.note_type_id && note.configuration" class="progress-note-values">
-    <summary>
+  <component
+    :is="expanded ? 'div' : 'details'"
+    v-if="note.note_type_id && note.configuration"
+    class="progress-note-values"
+  >
+    <p v-if="expanded" class="progress-note-values__type">
+      {{ note.configuration.note_type.name }}
+      <span v-if="note.current_configuration_state?.note_type_archived_at"> · Arhivat</span>
+    </p>
+    <summary v-else>
       <span aria-hidden="true">{{ projectIcon('folder') }}</span>
       <span class="progress-note-values__label"
         >{{ note.configuration.note_type.name }} ·
@@ -19,11 +37,11 @@ defineProps<{ note: ProgressNote }>()
       <span class="progress-note-values__chevron" aria-hidden="true">›</span>
     </summary>
     <dl>
-      <div v-for="field in note.configuration.fields" :key="field.field_id">
+      <div v-for="field in fields" :key="field.field_id">
         <dt>
           {{ field.definition.name
           }}<span v-if="field.definition.unit"> ({{ field.definition.unit }})</span
-          ><small v-if="field.required"> · Obligatoriu</small>
+          ><small v-if="field.required && !expanded"> · Obligatoriu</small>
         </dt>
         <dd>
           {{
@@ -35,12 +53,17 @@ defineProps<{ note: ProgressNote }>()
         </dd>
       </div>
     </dl>
-  </details>
+  </component>
 </template>
 <style scoped>
 .progress-note-values {
   min-width: 0;
   font-size: 0.82rem;
+}
+.progress-note-values__type {
+  margin: 0 0 6px;
+  color: var(--color-text-muted);
+  font-weight: 600;
 }
 .progress-note-values summary {
   min-height: 44px;

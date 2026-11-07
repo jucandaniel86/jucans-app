@@ -13,6 +13,11 @@ class ProjectProgressNoteResource extends JsonResource
             'id' => $this->id,
             'project_id' => $this->project_id,
             'created_by' => $this->created_by,
+            'author' => $this->whenLoaded('author', fn () => ['id' => $this->author->id, 'username' => $this->author->username]),
+            'review' => $this->whenLoaded('review', fn () => $this->review === null ? null : [
+                'task_id' => $this->review->task_id, 'occurrence_key' => $this->review->occurrence->occurrence_key,
+                'user_id' => $this->review->user_id,
+            ]),
             'updated_by' => $this->updated_by,
             'title' => $this->title,
             'content' => $this->content,

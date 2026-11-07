@@ -8,7 +8,7 @@ export const taskPriorities = {
   high: 'Ridicată',
   urgent: 'Urgentă',
 }
-export const taskStates = { pending: 'De făcut', done: 'Done', skipped: 'Omisă' }
+export const taskStates = { pending: 'De făcut', done: 'Finalizat', skipped: 'Nu poate fi făcut' }
 export const taskTypes = {
   one_time: 'O singură dată',
   recurring: 'Recurente',

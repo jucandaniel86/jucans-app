@@ -9,6 +9,7 @@ use App\Http\Requests\Project\UpdateProjectCollaboratorRequest;
 use App\Http\Resources\ProjectCollaboratorResource;
 use App\Models\Project;
 use App\Models\ProjectCollaborator;
+use App\Models\User;
 use App\Services\ProjectSharingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,15 @@ use Illuminate\Support\Facades\Gate;
 class ProjectCollaboratorController extends Controller
 {
     public function __construct(private readonly ProjectSharingService $sharing) {}
+
+    public function shareableUsers(Project $project): JsonResponse
+    {
+        Gate::authorize('viewCollaborators', $project);
+
+        return response()->json(['data' => User::query()
+            ->where('id', '!=', $project->created_by)
+            ->orderBy('username')->orderBy('id')->get(['id', 'username'])]);
+    }
 
     public function index(Project $project): AnonymousResourceCollection
     {

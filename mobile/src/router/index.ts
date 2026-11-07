@@ -27,6 +27,12 @@ declare module 'vue-router' {
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
+  scrollBehavior(to, _from, savedPosition) {
+    // Recipes restores its entry's scroll only after its async list has rendered.
+    if (to.name === 'recipes') return false
+    if (to.name === 'recipe-detail') return savedPosition ?? { top: 0, left: 0 }
+    return savedPosition ?? false
+  },
   routes: [
     {
       path: '/login',

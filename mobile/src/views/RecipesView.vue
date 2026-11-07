@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, RouterLink, useRoute, useRouter } from 'vue-router'
 
 import RecipeCard from '@/components/recipe/RecipeCard.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -29,6 +29,51 @@ const error = ref('')
 let debounceTimer: ReturnType<typeof setTimeout> | undefined
 let requestSequence = 0
 let syncingRoute = false
+let disposed = false
+let restoring = true
+let loadedFilters = ''
+let scrollFrame = 0
+const savedList = window.history.state?.recipeList
+const initialListState = savedList?.path === route.fullPath ? savedList : null
+advancedOpen.value = initialListState?.advancedOpen === true
+let filtersReady: Promise<unknown> = Promise.resolve()
+
+const requestedPage = computed(() => {
+  const page = Number(route.query.page)
+  return Number.isSafeInteger(page) && page > 0 ? page : 1
+})
+const filterKey = computed(() => JSON.stringify({ ...route.query, page: undefined }))
+
+function saveListPosition(): void {
+  if (
+    disposed ||
+    restoring ||
+    route.name !== 'recipes' ||
+    window.history.state?.current !== route.fullPath
+  )
+    return
+  window.history.replaceState(
+    {
+      ...window.history.state,
+      recipeList: { path: route.fullPath, top: window.scrollY, advancedOpen: advancedOpen.value },
+    },
+    '',
+  )
+}
+function trackScroll(): void {
+  cancelAnimationFrame(scrollFrame)
+  scrollFrame = requestAnimationFrame(saveListPosition)
+}
+async function restoreListPosition(top: number, sequence: number): Promise<void> {
+  await filtersReady
+  await nextTick()
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  if (disposed || sequence !== requestSequence || route.name !== 'recipes') return
+  window.scrollTo({ top, left: 0, behavior: 'instant' })
+  restoring = false
+  saveListPosition()
+}
+watch(advancedOpen, saveListPosition)
 
 const searchTerm = computed(() => search.value.trim())
 const selectedTags = computed(() => [
@@ -47,13 +92,19 @@ const selectedAuthor = computed(() => {
   const id = Number(route.query.author_id)
   return Number.isInteger(id) && id > 0 ? id : undefined
 })
-const authorName = computed(() =>
-  authors.value.find((author) => author.id === selectedAuthor.value)?.name ??
-  recipes.value.find((recipe) => recipe.author?.id === selectedAuthor.value)?.author?.name ??
-  `#${selectedAuthor.value}`,
+const authorName = computed(
+  () =>
+    authors.value.find((author) => author.id === selectedAuthor.value)?.name ??
+    recipes.value.find((recipe) => recipe.author?.id === selectedAuthor.value)?.author?.name ??
+    `#${selectedAuthor.value}`,
 )
 const hasFilters = computed(() =>
-  Boolean(searchTerm.value || selectedTags.value.length || selectedStructure.value || selectedAuthor.value),
+  Boolean(
+    searchTerm.value ||
+    selectedTags.value.length ||
+    selectedStructure.value ||
+    selectedAuthor.value,
+  ),
 )
 const total = computed(() => pagination.value?.total ?? 0)
 const canLoadMore = computed(() =>
@@ -66,26 +117,39 @@ const resultLabel = computed(() => {
     : `${total.value} ${noun}`
 })
 
-async function loadRecipes(page = 1, append = false): Promise<void> {
+async function loadRecipes(page = requestedPage.value, append = false): Promise<void> {
   const sequence = ++requestSequence
 
   if (append) loadingMore.value = true
   else loading.value = true
   error.value = ''
+  const key = filterKey.value
+  const saved = window.history.state?.recipeList
+  const listState = saved?.path === route.fullPath ? saved : null
+  const top = Number(listState?.top ?? 0)
+  if (!append) {
+    restoring = true
+    if (listState) advancedOpen.value = listState.advancedOpen === true
+  }
 
   try {
-    const response = await foodApi.listRecipes({
-      search: searchTerm.value || undefined,
-      tags: selectedTags.value,
-      dailyStructure: selectedStructure.value,
-      authorId: selectedAuthor.value,
-      page,
-    })
+    // Rebuild all visible pages on history navigation, then restore the viewport.
+    for (let current = append ? page : 1; current <= page; current++) {
+      const response = await foodApi.listRecipes({
+        search: searchTerm.value || undefined,
+        tags: selectedTags.value,
+        dailyStructure: selectedStructure.value,
+        authorId: selectedAuthor.value,
+        page: current,
+      })
 
-    if (sequence !== requestSequence) return
+      if (sequence !== requestSequence) return
 
-    recipes.value = append ? [...recipes.value, ...response.data] : response.data
-    pagination.value = response.meta
+      recipes.value = append || current > 1 ? [...recipes.value, ...response.data] : response.data
+      pagination.value = response.meta
+      loadedFilters = key
+      if (current >= response.meta.last_page) break
+    }
   } catch {
     if (sequence === requestSequence) {
       error.value = 'Nu am putut încărca rețetele.'
@@ -98,8 +162,28 @@ async function loadRecipes(page = 1, append = false): Promise<void> {
     if (sequence === requestSequence) {
       loading.value = false
       loadingMore.value = false
+      if (!append) await restoreListPosition(top, sequence)
     }
   }
+}
+
+async function loadMore(): Promise<void> {
+  if (loading.value || loadingMore.value || !canLoadMore.value) return
+  const path = route.fullPath
+  const page = (pagination.value?.current_page ?? 0) + 1
+  await loadRecipes(page, true)
+  if (
+    disposed ||
+    error.value ||
+    route.name !== 'recipes' ||
+    route.fullPath !== path ||
+    pagination.value?.current_page !== page
+  )
+    return
+  await router.replace({
+    query: { ...route.query, page: String(pagination.value?.current_page ?? 1) },
+  })
+  saveListPosition()
 }
 
 function updateFilters(
@@ -109,6 +193,7 @@ function updateFilters(
   author: number | null | undefined = selectedAuthor.value,
 ): void {
   if (
+    requestedPage.value === 1 &&
     query === (route.query.q ?? '') &&
     ids.join(',') === (route.query.tags ?? '') &&
     String(structure ?? '') === (route.query.daily_structure ?? '') &&
@@ -124,6 +209,7 @@ function updateFilters(
       tags: ids.length ? ids.join(',') : undefined,
       daily_structure: structure ? String(structure) : undefined,
       author_id: author ? String(author) : undefined,
+      page: undefined,
     },
   })
 }
@@ -157,15 +243,17 @@ watch(
 )
 
 watch(
-  () => [route.query.q, route.query.tags, route.query.daily_structure, route.query.author_id],
+  () => route.fullPath,
   () => {
+    if (route.name !== 'recipes') return
     window.clearTimeout(debounceTimer)
     syncingRoute = true
     search.value = typeof route.query.q === 'string' ? route.query.q : ''
     syncingRoute = false
+    if (loadedFilters === filterKey.value && pagination.value?.current_page === requestedPage.value)
+      return
     void loadRecipes()
   },
-  { immediate: true },
 )
 
 async function loadTags(): Promise<void> {
@@ -205,11 +293,18 @@ async function loadAuthors(): Promise<void> {
 }
 
 onMounted(() => {
-  void loadAuthors()
-  void loadTags()
-  void loadStructures()
+  window.addEventListener('scroll', trackScroll, { passive: true })
+  filtersReady = Promise.all([loadAuthors(), loadTags(), loadStructures()])
+  void loadRecipes()
+})
+onBeforeRouteLeave(() => {
+  saveListPosition()
+  window.clearTimeout(debounceTimer)
 })
 onBeforeUnmount(() => {
+  disposed = true
+  cancelAnimationFrame(scrollFrame)
+  window.removeEventListener('scroll', trackScroll)
   window.clearTimeout(debounceTimer)
   requestSequence++
 })
@@ -401,7 +496,7 @@ onBeforeUnmount(() => {
         block
         variant="secondary"
         :loading="loadingMore"
-        @click="loadRecipes((pagination?.current_page ?? 0) + 1, true)"
+        @click="loadMore"
       >
         Încarcă mai multe
       </AppButton>

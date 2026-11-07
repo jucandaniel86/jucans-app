@@ -23,6 +23,7 @@ class StoreProjectTaskRequest extends FormRequest
             'title' => ['required', 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string'],
             'execution_type' => ['sometimes', 'required', new Enum(ProjectTaskExecutionType::class)],
+            'review_mode' => ['sometimes', 'required', 'in:single,multiple'],
             'priority' => ['sometimes', 'required', new Enum(ProjectTaskPriority::class)],
             'status' => ['sometimes', 'required', new Enum(ProjectStatus::class)],
             'scheduled_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],

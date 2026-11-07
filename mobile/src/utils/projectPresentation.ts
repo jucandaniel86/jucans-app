@@ -24,6 +24,7 @@ export const projectIcons = [
   { value: 'wallet', label: '💰 Finanțe', symbol: '💰' },
   { value: 'star', label: '⭐ Pasiuni', symbol: '⭐' },
   { value: 'target', label: '🎯 Obiectiv', symbol: '🎯' },
+  { value: 'software', label: '💻 Software', symbol: '💻' },
 ]
 export function projectIcon(value: string): string {
   return projectIcons.find((icon) => icon.value === value)?.symbol ?? '📁'

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import ShoppingProductInput from './ShoppingProductInput.vue'
+import ShoppingCategorySelect from './ShoppingCategorySelect.vue'
+import type { ShoppingItemSuggestion } from '@/types/shopping'
 import AppInput from '@/components/ui/AppInput.vue'
 import type { FoodUnit } from '@/types/food'
 import type { ShoppingItem } from '@/types/shopping'
@@ -22,6 +25,7 @@ const confirmingDelete = ref(false)
 const name = ref(props.item.name)
 const quantity = ref(props.item.quantity ?? '')
 const unit = ref(props.item.unit ?? '')
+const category = ref<number | null>(props.item.shopping_category?.id ?? null)
 const formError = ref('')
 const manual = computed(() => props.item.ingredient_id === null && !props.item.sources?.length)
 const busy = computed(() => Boolean(shopping.pendingItemEdits[props.item.id]))
@@ -32,10 +36,16 @@ const recipeQuantityLabel = computed(() =>
   quantityLabel(props.item.calculated_quantity, props.item.unit, props.units),
 )
 
+function selectSuggestion(value: ShoppingItemSuggestion): void {
+  unit.value = value.unit ?? ''
+  category.value = value.category?.id ?? null
+}
+
 function resetForm(): void {
   name.value = props.item.name
   quantity.value = props.item.quantity ?? ''
   unit.value = props.item.unit ?? ''
+  category.value = props.item.shopping_category?.id ?? null
   formError.value = ''
   confirmingDelete.value = false
 }
@@ -65,7 +75,8 @@ async function changeChecked(event: Event): Promise<void> {
   await shopping.setChecked(props.item.id, input.checked)
   await nextTick()
   if (hadFocus && document.activeElement === document.body) {
-    document.getElementById(`shopping-item-${props.item.id}`)?.focus()
+    // The checkbox has moved between groups; restoring focus must not follow it with scroll.
+    document.getElementById(`shopping-item-${props.item.id}`)?.focus({ preventScroll: true })
   }
 }
 
@@ -86,16 +97,25 @@ async function saveEdit(): Promise<void> {
         name: name.value.trim(),
         quantity: parsedQuantity,
         unit: unit.value.trim() || null,
+        shopping_category_id: category.value,
       })
     } else {
-      await shopping.updateItem(props.item.id, { quantity: parsedQuantity })
+      await shopping.updateItem(props.item.id, {
+        quantity: parsedQuantity,
+        shopping_category_id: category.value,
+      })
     }
     closeEditor()
     notifications.success('Produsul a fost salvat.')
   } catch (failure) {
-    if (failure instanceof ApiError && failure.status === 422 &&
-      Object.keys(failure.errors).some((field) => ['name', 'quantity', 'unit'].includes(field))) {
-      formError.value = 'Verifică produsul, cantitatea și unitatea.'
+    if (
+      failure instanceof ApiError &&
+      failure.status === 422 &&
+      Object.keys(failure.errors).some((field) =>
+        ['name', 'quantity', 'unit', 'shopping_category_id'].includes(field),
+      )
+    ) {
+      formError.value = 'Verifică produsul, cantitatea, unitatea și categoria.'
       return
     }
     notifications.error(
@@ -173,7 +193,8 @@ watch(() => props.item.id, closeEditor)
     </div>
     <form v-if="editing" class="shopping-item__editor" @submit.prevent="saveEdit">
       <template v-if="manual">
-        <AppInput v-model="name" label="Produs" :error="formError" :disabled="busy" />
+        <ShoppingProductInput v-model="name" :disabled="busy" required @select="selectSuggestion" />
+        <p v-if="formError" role="alert">{{ formError }}</p>
         <div class="shopping-item__fields">
           <AppInput v-model="quantity" label="Cantitate" inputmode="decimal" :disabled="busy" />
           <AppInput v-model="unit" label="Unitate" :disabled="busy" />
@@ -197,6 +218,7 @@ watch(() => props.item.id, closeEditor)
           Rețete: {{ recipeQuantityLabel }}
         </p>
       </template>
+      <ShoppingCategorySelect v-model="category" :disabled="busy" />
       <div v-if="confirmingDelete" class="shopping-item__confirm" role="alert">
         <h3>Ștergi produsul?</h3>
         <p>Produsul va fi eliminat din lista de cumpărături.</p>

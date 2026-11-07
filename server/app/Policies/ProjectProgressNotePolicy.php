@@ -47,7 +47,8 @@ class ProjectProgressNotePolicy
     private function manage(User $user, ProjectProgressNote $note): bool
     {
         return $note->project->status === ProjectStatus::ACTIVE
-            && ($note->project->isOwnedBy($user) || (int) $note->created_by === (int) $user->id)
+            && ((int) $note->created_by === (int) $user->id
+                || (! $note->review()->exists() && $note->project->isOwnedBy($user)))
             && $this->view($user, $note);
     }
 }

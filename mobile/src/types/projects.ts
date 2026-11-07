@@ -67,3 +67,17 @@ export interface ProjectProgressSummary {
     evaluation_count: number
   }
 }
+
+export interface ProjectShareableUser {
+  id: number
+  username: string
+}
+
+export interface ProjectCollaborator {
+  id: number
+  project_id: number
+  user_id: number
+  sharing_mode: 'all_tasks' | 'selected_tasks'
+  user: { id: number; username: string; avatar: string | null }
+  task_ids: number[]
+}
