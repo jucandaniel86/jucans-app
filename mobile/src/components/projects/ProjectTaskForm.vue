@@ -25,7 +25,7 @@ const props = defineProps<{
   occurrenceDate?: string
 }>()
 const emit = defineEmits<{
-  saved: []
+  saved: [task: ProjectTask]
   changed: []
   cancel: []
   busy: [value: boolean]
@@ -222,7 +222,7 @@ async function save(): Promise<void> {
         )
       }
     }
-    emit('saved')
+    emit('saved', record.value!)
   } catch (failure) {
     if (failure instanceof ApiError) errors.value = failure.errors
     const message =

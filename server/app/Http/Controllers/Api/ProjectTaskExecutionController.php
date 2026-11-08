@@ -60,20 +60,29 @@ class ProjectTaskExecutionController extends Controller
 
     public function done(ExecuteProjectTaskRequest $request, Project $project, ProjectTask $task, string $occurrenceKey): JsonResponse
     {
-        return (new ProjectTaskOccurrenceResource($this->executions->execute($request->user(), $project, $task, $occurrenceKey, ProjectTaskCompletionAction::DONE, $request->validated())))
-            ->response()->setStatusCode(200);
+        return $this->mutationResponse($request, $project, $task, $occurrenceKey, ProjectTaskCompletionAction::DONE);
     }
 
     public function undo(ExecuteProjectTaskRequest $request, Project $project, ProjectTask $task, string $occurrenceKey): JsonResponse
     {
-        return (new ProjectTaskOccurrenceResource($this->executions->execute($request->user(), $project, $task, $occurrenceKey, ProjectTaskCompletionAction::UNDO, $request->validated())))
-            ->response()->setStatusCode(200);
+        return $this->mutationResponse($request, $project, $task, $occurrenceKey, ProjectTaskCompletionAction::UNDO);
     }
 
     public function skip(ExecuteProjectTaskRequest $request, Project $project, ProjectTask $task, string $occurrenceKey): JsonResponse
     {
-        return (new ProjectTaskOccurrenceResource($this->executions->execute($request->user(), $project, $task, $occurrenceKey, ProjectTaskCompletionAction::SKIP, $request->validated())))
-            ->response()->setStatusCode(200);
+        return $this->mutationResponse($request, $project, $task, $occurrenceKey, ProjectTaskCompletionAction::SKIP);
+    }
+
+    private function mutationResponse(ExecuteProjectTaskRequest $request, Project $project, ProjectTask $task, string $key, ProjectTaskCompletionAction $action): JsonResponse
+    {
+        $occurrence = $this->executions->execute($request->user(), $project, $task, $key, $action, $request->validated());
+        $task = $task->fresh()->setRelation('project', $project);
+
+        return (new ProjectTaskOccurrenceResource($occurrence))->additional([
+            'task' => (new ProjectTaskResource($task))->resolve(),
+            'review_context' => ['mode' => $task->review_mode,
+                'can_create' => app(\App\Services\ProjectTaskReviewService::class)->canCreate($request->user(), $task, $occurrence)],
+        ])->response();
     }
 
     public function history(ListProjectTaskExecutionsRequest $request, Project $project, ProjectTask $task): AnonymousResourceCollection

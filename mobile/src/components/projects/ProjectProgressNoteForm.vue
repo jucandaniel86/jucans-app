@@ -37,7 +37,7 @@ const props = withDefaults(
   { timezone: 'UTC', initialTasks: () => [] },
 )
 const emit = defineEmits<{
-  saved: []
+  saved: [note: ProgressNote]
   changed: []
   cancel: []
   busy: [value: boolean]
@@ -471,7 +471,7 @@ async function save(): Promise<void> {
     attemptedCreate = !initial && !state.noteSaved
     await saveNoteAndScores(props.project.id, initial?.id, payload, intents, state)
     completed.value = true
-    emit('saved')
+    emit('saved', state.note!)
   } catch (failure) {
     if (failure instanceof ApiError) {
       errors.value = failure.errors

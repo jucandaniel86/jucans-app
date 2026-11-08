@@ -57,17 +57,20 @@ export async function saveNoteAndScores(
   }
   for (const intent of scores) {
     if (state.finished.has(intent.task_id)) continue
-    if (intent.existing)
-      await projectProgressApi.updateEvaluation(project, intent.task_id, intent.existing.id, {
-        score: intent.score,
-        lock_version: intent.existing.lock_version,
-      })
-    else
-      await projectProgressApi.createEvaluation(project, intent.task_id, {
-        score: intent.score,
-        evaluation_date: payload.noted_at,
-        note_id: state.note!.id,
-      })
+    const response = intent.existing
+      ? await projectProgressApi.updateEvaluation(project, intent.task_id, intent.existing.id, {
+          score: intent.score,
+          lock_version: intent.existing.lock_version,
+        })
+      : await projectProgressApi.createEvaluation(project, intent.task_id, {
+          score: intent.score,
+          evaluation_date: payload.noted_at,
+          note_id: state.note!.id,
+        })
+    state.note!.evaluations = [
+      ...state.note!.evaluations.filter((value) => value.id !== response.data.id),
+      response.data,
+    ]
     state.finished.add(intent.task_id)
   }
   return state.note!

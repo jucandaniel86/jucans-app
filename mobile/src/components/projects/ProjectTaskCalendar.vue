@@ -2,10 +2,18 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import ProjectTaskCard from '@/components/projects/ProjectTaskCard.vue'
+import { projectProgressApi } from '@/services/projectProgressApi'
+import type { ProgressNote } from '@/types/projectProgress'
 import { projectTasksApi } from '@/services/projectTasksApi'
 import { ApiError } from '@/services/api'
 import type { Project } from '@/types/projects'
-import type { ProjectTask, TaskOccurrence } from '@/types/projectTasks'
+import type {
+  CalendarTaskData,
+  CalendarReadRequest,
+  CalendarExecutionResult,
+  CalendarReviews,
+  ProjectTask,
+} from '@/types/projectTasks'
 import { shiftDate, taskError, today } from '@/utils/projectTasks'
 
 const props = withDefaults(
@@ -14,6 +22,7 @@ const props = withDefaults(
 )
 const emit = defineEmits<{
   changed: []
+  summaryChanged: []
   busy: [value: boolean]
   accessChanged: []
   progress: [task: ProjectTask, date: string]
@@ -51,20 +60,40 @@ function longDate(date: string): string {
   const [year, month, day] = date.split('-').map(Number)
   return `${day} ${months[month! - 1]} ${year}`
 }
-const tasks = ref<ProjectTask[]>([])
-const page = ref(0)
-const lastPage = ref(1)
-const total = ref(0)
+const rows = ref<CalendarTaskData[]>([])
+const visibleLimit = ref(20)
+const tasks = computed(() => rows.value.slice(0, visibleLimit.value).map((row) => row.task))
+const page = computed(() => Math.ceil(visibleLimit.value / 20))
+const total = computed(() => rows.value.length)
+const lastPage = computed(() => Math.max(1, Math.ceil(total.value / 20)))
 const loading = ref(false)
+const pendingCommands = ref(new Set<number>())
+const navigationLocked = computed(() => props.locked || pendingCommands.value.size > 0)
+function pendingCommand(task: number, value: boolean): void {
+  const pending = new Set(pendingCommands.value)
+  if (value) pending.add(task)
+  else pending.delete(task)
+  pendingCommands.value = pending
+}
 const undatedOpen = ref(false)
 const error = ref('')
-type WeekTask = { occurrences: TaskOccurrence[]; hasSchedule: boolean }
-const data = ref(new Map<number, WeekTask>())
-let cachedWeek = ''
+const data = computed(() => new Map(rows.value.map((row) => [row.task.id, row])))
 let sequence = 0
 let disposed = false
+let loadingKey = ''
 const occurrenceFor = (task: ProjectTask) =>
-  data.value.get(task.id)?.occurrences.find((row) => row.scheduled_date === selected.value)
+  data.value
+    .get(task.id)
+    ?.occurrences.find(
+      (row) =>
+        row.occurrence_key === (task.execution_type === 'one_time' ? 'single' : selected.value),
+    )
+const reviewsFor = (task: ProjectTask): CalendarReviews =>
+  occurrenceFor(task)?.reviews ?? {
+    data: [],
+    meta: { current_page: 1, last_page: 1, total: 0 },
+    review_context: { mode: task.review_mode ?? 'single', can_create: false, active_count: 0 },
+  }
 const dated = computed(() =>
   tasks.value.filter((task) => {
     if (task.execution_type === 'one_time') return task.scheduled_date === selected.value
@@ -79,85 +108,160 @@ const undated = computed(() =>
     (task) =>
       task.scheduled_date === null &&
       !dated.value.includes(task) &&
-      (task.execution_type !== 'recurring' || data.value.get(task.id)?.hasSchedule === false),
+      (task.execution_type !== 'recurring' || data.value.get(task.id)?.has_schedule === false),
   ),
 )
-async function loadWeek(request: number): Promise<void> {
-  const from = week.value
-  const to = end.value
-  const cache = cachedWeek === from ? new Map(data.value) : new Map<number, WeekTask>()
-  const pending = tasks.value.filter(
-    (task) => task.execution_type !== 'one_time' && !cache.has(task.id),
-  )
-  // A range query per dated task covers all seven days, with bounded concurrency.
-  for (let index = 0; index < pending.length; index += 4) {
-    await Promise.all(
-      pending.slice(index, index + 4).map(async (task) => {
-        const response = await projectTasksApi.occurrences(props.project.id, task.id, from, to)
-        let hasSchedule =
-          task.execution_type === 'recurring' && response.data.some((row) => row.is_scheduled)
-        if (task.execution_type === 'recurring' && !hasSchedule) {
-          hasSchedule =
-            (await projectTasksApi.scheduleVersions(props.project.id, task.id)).data.length > 0
-        }
-        cache.set(task.id, { occurrences: response.data, hasSchedule })
-      }),
-    )
-    if (request !== sequence || disposed) return
-  }
-  if (request !== sequence || disposed) return
-  cachedWeek = from
-  data.value = cache
-}
-async function load(catalog: boolean, more = false): Promise<void> {
+async function load(): Promise<void> {
+  const identity = `${props.project.id}:${week.value}:${end.value}`
+  if (loading.value && loadingKey === identity) return
   const request = ++sequence
+  loadingKey = identity
   loading.value = true
   error.value = ''
   try {
-    if (catalog) {
-      const response = await projectTasksApi.list(props.project.id, {
-        page: more ? page.value + 1 : 1,
-        per_page: 20,
-      })
-      if (request !== sequence || disposed) return
-      tasks.value = more
-        ? [...new Map([...tasks.value, ...response.data].map((task) => [task.id, task])).values()]
-        : response.data
-      page.value = response.meta.current_page
-      lastPage.value = response.meta.last_page
-      total.value = response.meta.total
-      if (!more) {
-        data.value = new Map()
-        cachedWeek = ''
-      }
-    }
-    await loadWeek(request)
+    const response = await projectTasksApi.calendar(props.project.id, week.value, end.value)
+    if (request !== sequence || disposed) return
+    rows.value = response.data
   } catch (failure) {
-    if (request === sequence && !disposed) {
-      error.value = taskError(failure)
-      if (failure instanceof ApiError && [403, 404].includes(failure.status)) emit('accessChanged')
-    }
+    if (request !== sequence || disposed) return
+    error.value = taskError(failure)
+    if (failure instanceof ApiError && [403, 404].includes(failure.status)) emit('accessChanged')
   } finally {
     if (request === sequence && !disposed) loading.value = false
   }
 }
-function reload(): void {
-  void load(true)
+function reload(task?: ProjectTask): void {
+  // An edited visible task can move out of the range. Recurrence changes can
+  // affect future dates, so reload those conservatively using the same algorithm.
+  if (
+    task &&
+    !data.value.has(task.id) &&
+    task.execution_type === 'one_time' &&
+    task.scheduled_date !== null &&
+    (task.scheduled_date < week.value || task.scheduled_date > end.value)
+  )
+    return
+  void load()
+}
+function reviewChanged(note: ProgressNote): void {
+  if (!note.review) return
+  const row = data.value.get(note.review.task_id)
+  const occurrence = row?.occurrences.find(
+    (value) => value.occurrence_key === note.review!.occurrence_key,
+  )
+  if (!row || !occurrence) return
+  const previous = occurrence.reviews
+  const old = previous.data.find((value) => value.id === note.id)
+  const notes = [note, ...previous.data.filter((value) => value.id !== note.id)]
+  const total = previous.meta.total + (old ? 0 : 1)
+  occurrence.reviews = {
+    data: notes,
+    meta: { ...previous.meta, total, last_page: Math.max(1, Math.ceil(total / 20)) },
+    review_context: {
+      ...previous.review_context,
+      ...note.review_context,
+      active_count:
+        (previous.review_context.active_count ?? 0) +
+        (note.deleted_at ? 0 : 1) -
+        (old && !old.deleted_at ? 1 : 0),
+    },
+  }
+}
+function occurrenceChanged(result: CalendarExecutionResult): void {
+  const row = data.value.get(result.task.id)
+  if (!row) return
+  row.task = result.task
+  const index = row.occurrences.findIndex(
+    (value) => value.occurrence_key === result.data.occurrence_key,
+  )
+  const old = row.occurrences[index]
+  if (!old) return
+  emit('summaryChanged')
+  row.occurrences[index] = {
+    ...old,
+    ...result.data,
+    reviews: {
+      ...old.reviews,
+      review_context: { ...old.reviews.review_context, ...result.review_context },
+    },
+  }
+}
+async function read(request: CalendarReadRequest): Promise<void> {
+  const id = props.project.id
+  const version = sequence
+  try {
+    let response: unknown
+    if (request.kind === 'history')
+      response = await projectTasksApi.history(
+        id,
+        request.taskId,
+        request.from!,
+        request.to!,
+        request.page,
+      )
+    else if (request.kind === 'next')
+      response = await projectTasksApi.occurrences(
+        id,
+        request.taskId,
+        request.from!,
+        request.to!,
+        request.page,
+      )
+    else if (request.kind === 'reviews') {
+      const result = await projectProgressApi.reviews(
+        id,
+        request.taskId,
+        request.key!,
+        request.page,
+      )
+      if (!disposed && version === sequence) {
+        const occurrence = data.value
+          .get(request.taskId)
+          ?.occurrences.find((value) => value.occurrence_key === request.key)
+        if (occurrence) {
+          const existing = (request.page ?? 1) > 1 ? occurrence.reviews.data : []
+          occurrence.reviews = {
+            ...result,
+            review_context: { ...occurrence.reviews.review_context, ...result.review_context },
+            data: [
+              ...new Map([...existing, ...result.data].map((note) => [note.id, note])).values(),
+            ],
+          }
+        }
+      }
+      response = result
+    } else {
+      await load()
+      response = data.value.get(request.taskId)
+    }
+    request.resolve(response)
+  } catch (failure) {
+    request.reject(failure)
+  }
+}
+function selectDate(date: string): void {
+  if (navigationLocked.value || loading.value) return
+  selected.value = date
+  week.value = monday(date)
 }
 function moveWeek(offset: number): void {
-  if (props.locked || loading.value) return
+  if (navigationLocked.value || loading.value) return
   selected.value = shiftDate(selected.value, offset * 7)
   week.value = monday(selected.value)
 }
 function goToday(): void {
-  if (props.locked || loading.value) return
+  if (navigationLocked.value || loading.value) return
   selected.value = localToday()
   week.value = monday(selected.value)
 }
 watch(week, () => {
-  void load(false)
+  void load()
 })
-watch(() => props.project.id, reload, { immediate: true })
+watch(
+  () => props.project.id,
+  () => reload(),
+  { immediate: true },
+)
 onBeforeUnmount(() => {
   disposed = true
   sequence++
@@ -175,7 +279,7 @@ defineExpose({ reload })
         class="task-quick"
         type="button"
         aria-label="Săptămâna precedentă"
-        :disabled="locked || loading"
+        :disabled="navigationLocked || loading"
         @click="moveWeek(-1)"
       >
         ‹
@@ -185,7 +289,7 @@ defineExpose({ reload })
         class="task-quick"
         type="button"
         aria-label="Săptămâna următoare"
-        :disabled="locked || loading"
+        :disabled="navigationLocked || loading"
         @click="moveWeek(1)"
       >
         ›
@@ -200,7 +304,7 @@ defineExpose({ reload })
         :aria-label="longDate(day.date)"
         :aria-pressed="selected === day.date"
         :aria-current="day.date === localToday() ? 'date' : undefined"
-        :disabled="locked || loading"
+        :disabled="navigationLocked || loading"
         @click="selected = day.date"
       >
         <span>{{ day.label }}</span
@@ -212,7 +316,7 @@ defineExpose({ reload })
       <button
         class="projects-text-button"
         type="button"
-        :disabled="locked || loading"
+        :disabled="navigationLocked || loading"
         @click="goToday"
       >
         Astăzi
@@ -221,7 +325,7 @@ defineExpose({ reload })
     <p v-if="loading" role="status" class="projects-muted">Se încarcă săptămâna…</p>
     <div v-else-if="error" class="projects-error" role="alert">
       <p>{{ error }}</p>
-      <AppButton variant="secondary" :disabled="locked" @click="reload">Reîncearcă</AppButton>
+      <AppButton variant="secondary" :disabled="locked" @click="reload()">Reîncearcă</AppButton>
     </div>
     <template v-else>
       <p v-if="!dated.length" class="task-empty">
@@ -237,9 +341,14 @@ defineExpose({ reload })
           :locked="locked"
           compact
           :selected-date="selected"
-          :calendar-occurrence="
-            task.execution_type === 'one_time' ? undefined : (occurrenceFor(task) ?? null)
-          "
+          :calendar-occurrence="occurrenceFor(task) ?? null"
+          :calendar-data="data.get(task.id)"
+          :calendar-reviews="reviewsFor(task)"
+          @review-changed="reviewChanged"
+          @occurrence-changed="occurrenceChanged"
+          @pending-command="pendingCommand(task.id, $event)"
+          @calendar-read="read"
+          @calendar-date="selectDate"
           @busy="emit('busy', $event)"
           @changed="emit('changed')"
           @access-changed="emit('accessChanged')"
@@ -265,9 +374,14 @@ defineExpose({ reload })
             :locked="locked"
             compact
             :selected-date="selected"
-            :calendar-occurrence="
-              task.execution_type === 'one_time' ? undefined : (occurrenceFor(task) ?? null)
-            "
+            :calendar-occurrence="occurrenceFor(task) ?? null"
+            :calendar-data="data.get(task.id)"
+            :calendar-reviews="reviewsFor(task)"
+            @review-changed="reviewChanged"
+            @occurrence-changed="occurrenceChanged"
+            @pending-command="pendingCommand(task.id, $event)"
+            @calendar-read="read"
+            @calendar-date="selectDate"
             @busy="emit('busy', $event)"
             @changed="emit('changed')"
             @access-changed="emit('accessChanged')"
@@ -284,7 +398,7 @@ defineExpose({ reload })
         variant="secondary"
         block
         :disabled="locked"
-        @click="load(true, true)"
+        @click="visibleLimit += 20"
         >Încarcă încă 20 de taskuri</AppButton
       >
     </template>

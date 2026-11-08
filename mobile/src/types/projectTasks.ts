@@ -79,3 +79,45 @@ export interface TaskFilters {
   page?: number
   per_page?: number
 }
+
+// PERF-01: owned by the project calendar; historical pages remain explicit reads.
+export interface ReviewContext {
+  mode: 'single' | 'multiple'
+  can_create: boolean
+  active_count?: number
+}
+export interface CalendarReviews {
+  data: import('./projectProgress').ProgressNote[]
+  meta: { current_page: number; last_page: number; total: number }
+  review_context: ReviewContext
+}
+export interface CalendarOccurrence extends TaskOccurrence {
+  reviews: CalendarReviews
+}
+export interface CalendarTaskData {
+  task: ProjectTask
+  has_schedule: boolean
+  current_rule: TaskSchedule | null
+  latest_rule: TaskSchedule | null
+  occurrences: CalendarOccurrence[]
+}
+export interface TaskCalendarResponse {
+  start_date: string
+  end_date: string
+  data: CalendarTaskData[]
+}
+export interface CalendarReadRequest {
+  taskId: number
+  kind: 'history' | 'next' | 'reviews' | 'refresh'
+  from?: string
+  to?: string
+  page?: number
+  key?: string
+  resolve: (value: unknown) => void
+  reject: (reason: unknown) => void
+}
+export interface CalendarExecutionResult {
+  data: TaskOccurrence
+  task: ProjectTask
+  review_context: ReviewContext
+}

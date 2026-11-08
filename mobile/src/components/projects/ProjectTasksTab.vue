@@ -121,9 +121,12 @@ function closeCreate(): void {
   creating.value = false
   reload()
 }
-function created(): void {
+function created(task: ProjectTask): void {
   creating.value = false
-  changed()
+  if (mode.value === 'calendar' && !trash.value) {
+    calendar.value?.reload(task)
+    emit('changed')
+  } else changed()
 }
 function toggleGroup(group: (typeof groups)[number], event: Event): void {
   group.open = (event.target as HTMLDetailsElement).open
@@ -138,7 +141,9 @@ watch(search, () => {
   clearTimeout(timer)
   timer = setTimeout(reload, 300)
 })
-watch(mode, reload)
+watch(mode, () => {
+  if (mode.value === 'list') reload()
+})
 watch(
   [status, priority, trash, () => props.project.id, () => props.project.status],
   () => {
@@ -209,6 +214,7 @@ onBeforeUnmount(() => {
       :locked="locked"
       @busy="busy"
       @changed="changed"
+      @summary-changed="emit('changed')"
       @access-changed="emit('accessChanged')"
       @progress="(task, date) => emit('progress', task, date)"
     >

@@ -130,3 +130,63 @@ syntax checks only; functional/concurrency/device verification remains manual.
 6. Soft-delete own review: its slot stays occupied. Restore through its task panel;
    existing evaluation conflicts remain explicit 409. Confirm historical ordinary
    notes, membership revocation and inactive-project read-only restrictions remain.
+
+## Single Review soft-delete correction (2026-11-08)
+
+This correction supersedes the original Single slot-reservation behavior above.
+Multiple still reserves an author's slot after soft deletion, unchanged.
+
+Apply **either** migration
+`2026_11_08_000001_release_soft_deleted_single_review_slots.php` **or** the separate
+[manual MySQL SQL](sql/single-review-soft-delete.sql), once, after the existing
+Stage 3 schema and before deploying the updated backend/frontend. No migration or
+SQL was executed during implementation. The old schema's two UNIQUE indexes block
+recreation regardless of frontend eligibility; both must be extended as supplied.
+
+A nullable `active_slot` (`'1'` by default) is added to both reservation indexes.
+Single live reviews use `'1'`; soft-deleted Single reviews use NULL. Multiple uses
+`'1'` for both live and deleted reviews, retaining its existing one-per-author rule.
+The upgrade releases existing Single tombstones only. The note, review association,
+author, occurrence, Custom Fields and snapshots stay intact for audit.
+
+Backend eligibility ignores deleted notes only in Single. Deletion releases the
+Single reservation in the existing project-lock transaction. Restoration reserves
+it again; if another live Single review occupies the occurrence, restoration returns
+409 and leaves the deleted note intact. Existing evaluation restoration conflicts
+also remain 409 and roll back the reservation change. Creation/restoration reconcile
+old deleted Single reservations under the same lock. TO_DO still blocks NEW review
+creation; task/occurrence status is never changed by this correction.
+
+Frontend own-review detection ignores Single tombstones when deciding Add/Edit.
+Single listing puts the live review before audit history, so even a long paginated
+history cannot hide the active review or distort its badge count. Multiple listing
+and eligibility remain unchanged. Authors retain access to their own deleted notes
+under the existing visibility rules; no private content is newly exposed.
+
+Mode changes preserve all audit rows. Multiple→Single keeps the prior conflict
+rule. Single→Multiple returns 409 if the new Single history contains multiple
+reviews by the same author for an occurrence, because the unchanged Multiple
+reservation rule cannot represent that history. It never drops/merges records.
+Likewise, migration rollback refuses conflicting history instead of deleting it.
+
+Modified code: `ProjectTaskReviewService.php`, `ProjectProgressNoteService.php`,
+`ProjectTaskReviewController.php`, `ProjectTaskReviews.vue`; new migration and SQL
+above. No automated tests were created, changed or run.
+
+Manual iPhone verification:
+
+1. With an active project, create a Single review on Done; soft-delete it through
+   the existing note action. Open task Reviews again: Add Review must be available.
+2. Create another review for the same occurrence, with the same author; task status
+   must remain Done. Repeat deletion/recreation and check live review count is 0/1.
+3. Confirm old notes remain in audit/Trash with their saved values and occurrence
+   links. Restore an old note while a live replacement exists: explicit 409, neither
+   note overwritten. With the slot free, restoring one eligible old note succeeds.
+4. Repeat with a collaborator who has task access. Another author's LIVE Single
+   review still permits View only. Each author's deleted-note visibility is unchanged.
+5. Repeat on two recurring dates; deleting one occurrence's review must not free or
+   occupy another. Undo to TO_DO must still prevent creation of a new review.
+6. Multiple: deleting one's review still does not enable creating another for that
+   author; restoring it remains possible under the original evaluation constraints.
+7. Confirm restoration conflicts and repeated save taps preserve audit/history and
+   never leave more than one live Single review for the same occurrence.

@@ -10,16 +10,25 @@ use App\Models\ProjectTask;
 use App\Models\ProjectTaskOccurrence;
 use App\Models\ProjectTaskReview;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 
 class ProjectTaskReviewService
 {
-    public function canCreate(User $user, ProjectTask $task, ?ProjectTaskOccurrence $occurrence): bool
+    public function canCreate(User $user, ProjectTask $task, ?ProjectTaskOccurrence $occurrence, ?Collection $loadedReviews = null): bool
     {
         if ($occurrence === null || $occurrence->status === ProjectTaskOccurrenceStatus::PENDING
             || $task->project->status !== ProjectStatus::ACTIVE
             || $task->trashed() || $task->status === ProjectStatus::ARCHIVED) {
             return false;
+        }
+        if ($loadedReviews !== null) {
+            $reserved = $task->review_mode === 'single'
+                ? $loadedReviews->filter(fn ($review) => $review->note !== null && ! $review->note->trashed())
+                : $loadedReviews;
+
+            return ! $reserved->contains('user_id', $user->id)
+                && ($task->review_mode !== 'single' || $reserved->isEmpty());
         }
         $reviews = ProjectTaskReview::query()->where('occurrence_id', $occurrence->id);
         if ($task->review_mode === 'single') {
@@ -107,7 +116,7 @@ class ProjectTaskReviewService
                 ->update(['active_slot' => null]);
         } else {
             // Multiple still reserves one slot per author, including deleted notes.
-            // Single history can now contain repeated exports by that author.
+            // Single history can now contain repeated reviews by that author.
             abort_if((clone $reviews)->select(['occurrence_id', 'user_id'])->groupBy('occurrence_id', 'user_id')
                 ->havingRaw('COUNT(*) > 1')->exists(), 409,
                 'Cannot switch to Multiple: historical reviews would occupy the same author slot. No history was removed.');

@@ -18,6 +18,7 @@ class ProjectProgressNoteResource extends JsonResource
                 'task_id' => $this->review->task_id, 'occurrence_key' => $this->review->occurrence->occurrence_key,
                 'user_id' => $this->review->user_id,
             ]),
+            'review_context' => $this->when(array_key_exists('review_context', $this->resource->getAttributes()), fn () => $this->getAttribute('review_context')),
             'updated_by' => $this->updated_by,
             'title' => $this->title,
             'content' => $this->content,

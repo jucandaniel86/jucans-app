@@ -11,6 +11,17 @@ import type {
 
 const root = (project: number) => `/projects/${project}`
 const evaluations = (project: number, task: number) => `${root(project)}/tasks/${task}/evaluations`
+const noteDeletedListeners = new Set<(project: number, note: number) => void>()
+
+export function onProgressNoteDeleted(
+  listener: (project: number, note: number) => void,
+): () => void {
+  noteDeletedListeners.add(listener)
+  return () => {
+    noteDeletedListeners.delete(listener)
+  }
+}
+
 export const projectProgressApi = {
   reviews(
     project: number,
@@ -50,8 +61,9 @@ export const projectProgressApi = {
   ): Promise<ResourceItem<ProgressNote>> {
     return api.patch(`${root(project)}/notes/${note}`, payload)
   },
-  deleteNote(project: number, note: number): Promise<void> {
-    return api.delete(`${root(project)}/notes/${note}`)
+  async deleteNote(project: number, note: number): Promise<void> {
+    await api.delete(`${root(project)}/notes/${note}`)
+    for (const listener of noteDeletedListeners) listener(project, note)
   },
   restoreNote(project: number, note: number): Promise<ResourceItem<ProgressNote>> {
     return api.post(`${root(project)}/notes/${note}/restore`)

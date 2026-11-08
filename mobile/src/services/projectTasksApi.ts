@@ -3,6 +3,8 @@ import type { ResourceItem } from '@/types/food'
 import type { ProjectStatus } from '@/types/projects'
 import type {
   ExecutionAction,
+  CalendarExecutionResult,
+  TaskCalendarResponse,
   ProjectTask,
   TaskCompletionEvent,
   TaskFilters,
@@ -16,6 +18,11 @@ import type {
 const base = (project: number, task?: number) =>
   `/projects/${project}/tasks${task === undefined ? '' : `/${task}`}`
 export const projectTasksApi = {
+  calendar(project: number, startDate: string, endDate: string): Promise<TaskCalendarResponse> {
+    return api.get(
+      `/projects/${project}/task-calendar?${new URLSearchParams({ start_date: startDate, end_date: endDate })}`,
+    )
+  },
   list(project: number, filters: TaskFilters, trash = false): Promise<TaskPage<ProjectTask>> {
     const query = new URLSearchParams({ sort: 'overdue', per_page: '10' })
     Object.entries(filters).forEach(([key, value]) => {
@@ -65,7 +72,7 @@ export const projectTasksApi = {
     key: string,
     action: ExecutionAction,
     command: { request_id: string; lock_version: number },
-  ): Promise<ResourceItem<TaskOccurrence>> {
+  ): Promise<ResourceItem<TaskOccurrence> & Partial<Omit<CalendarExecutionResult, 'data'>>> {
     return api.post(`${base(project, task)}/occurrences/${key}/${action}`, {
       request_id: command.request_id,
       lock_version: command.lock_version,

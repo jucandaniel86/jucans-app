@@ -74,6 +74,7 @@ export interface TaskReviewContext {
   occurrence_key: string
 }
 export interface ProgressNote {
+  review_context?: import('./projectTasks').ReviewContext
   review?: (TaskReviewContext & { user_id: number }) | null
   author?: { id: number; username: string }
   id: number

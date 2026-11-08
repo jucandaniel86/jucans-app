@@ -8,9 +8,15 @@ import { ApiError } from '@/services/api'
 import { projectTasksApi } from '@/services/projectTasksApi'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notifications'
+import type { ProgressNote } from '@/types/projectProgress'
 import type { Project } from '@/types/projects'
 import type {
   ExecutionAction,
+  CalendarTaskData,
+  CalendarReviews,
+  CalendarReadRequest,
+  CalendarExecutionResult,
+  TaskPage,
   ProjectTask,
   TaskCompletionEvent,
   TaskOccurrence,
@@ -40,11 +46,17 @@ const props = withDefaults(
     widgetCompact?: boolean
     selectedDate?: string
     calendarOccurrence?: TaskOccurrence | null
+    calendarData?: CalendarTaskData
+    calendarReviews?: CalendarReviews
   }>(),
   { timezone: 'UTC', trash: false, locked: false, compact: false, widgetCompact: false },
 )
 const emit = defineEmits<{
   changed: []
+  reviewChanged: [note: ProgressNote]
+  occurrenceChanged: [result: CalendarExecutionResult]
+  calendarRead: [request: CalendarReadRequest]
+  calendarDate: [date: string]
   pendingCommand: [value: boolean]
   busy: [value: boolean]
   accessChanged: []
@@ -297,6 +309,18 @@ async function loadOccurrence(force = false): Promise<void> {
     if (request === readSequence) loading.value = false
   }
 }
+function calendarRead<T>(
+  input: Omit<CalendarReadRequest, 'taskId' | 'resolve' | 'reject'>,
+): Promise<T> {
+  return new Promise((resolve, reject) =>
+    emit('calendarRead', {
+      ...input,
+      taskId: task.value.id,
+      resolve: (value) => resolve(value as T),
+      reject,
+    }),
+  )
+}
 async function loadNext(): Promise<void> {
   if (props.compact && !expanded.value) return
   if (task.value.execution_type !== 'recurring' || props.trash) return
@@ -309,13 +333,9 @@ async function loadNext(): Promise<void> {
     const to = shiftDate(from, 365)
     let page = 1
     do {
-      const response = await projectTasksApi.occurrences(
-        props.project.id,
-        task.value.id,
-        from,
-        to,
-        page,
-      )
+      const response = props.calendarData
+        ? await calendarRead<TaskPage<TaskOccurrence>>({ kind: 'next', from, to, page })
+        : await projectTasksApi.occurrences(props.project.id, task.value.id, from, to, page)
       if (request !== nextSequence) return
       next.value = response.data.find((row) => row.is_scheduled && row.status === 'pending') ?? null
       if (next.value || page >= response.meta.last_page) break
@@ -330,6 +350,11 @@ async function loadNext(): Promise<void> {
   }
 }
 async function loadRules(): Promise<void> {
+  if (props.calendarData) {
+    currentRule.value = props.calendarData.current_rule
+    latestRule.value = props.calendarData.latest_rule
+    return
+  }
   if (task.value.execution_type !== 'recurring' || props.trash) return
   ruleError.value = ''
   try {
@@ -355,13 +380,20 @@ async function loadHistory(more = false): Promise<void> {
     historyLastPage.value = 1
   }
   try {
-    const response = await projectTasksApi.history(
-      props.project.id,
-      task.value.id,
-      historyStart.value,
-      historyEnd.value,
-      more ? historyPage.value + 1 : 1,
-    )
+    const response = props.calendarData
+      ? await calendarRead<TaskPage<TaskCompletionEvent>>({
+          kind: 'history',
+          from: historyStart.value,
+          to: historyEnd.value,
+          page: more ? historyPage.value + 1 : 1,
+        })
+      : await projectTasksApi.history(
+          props.project.id,
+          task.value.id,
+          historyStart.value,
+          historyEnd.value,
+          more ? historyPage.value + 1 : 1,
+        )
     if (request !== historySequence) return
     history.value = more ? [...history.value, ...response.data] : response.data
     historyPage.value = response.meta.current_page
@@ -387,7 +419,11 @@ function historyPeriod(days: number): void {
   historyEnd.value = shiftDate(historyEnd.value, days)
   void loadHistory()
 }
-async function refresh(): Promise<void> {
+async function refresh(force = false): Promise<void> {
+  if (props.calendarData) {
+    if (force) await calendarRead<CalendarTaskData>({ kind: 'refresh' })
+    return
+  }
   eligible.value = false
   try {
     task.value = (await projectTasksApi.get(props.project.id, task.value.id)).data
@@ -419,16 +455,31 @@ async function execute(action: ExecutionAction, retry = false): Promise<void> {
     }
   const pending = command.value!
   try {
-    await projectTasksApi.execute(
+    const response = await projectTasksApi.execute(
       props.project.id,
       task.value.id,
       pending.key,
       pending.action,
       pending,
     )
-    command.value = null
-    await refresh()
-    emit('changed')
+    if (props.calendarData) {
+      if (!response.task || !response.review_context)
+        throw new Error('Răspunsul serverului nu include datele PERF-01. Reîncarcă intervalul.')
+      command.value = null
+      task.value = response.task
+      occurrence.value = { ...occurrence.value, ...response.data }
+      emit('occurrenceChanged', {
+        data: response.data,
+        task: response.task,
+        review_context: response.review_context,
+      })
+      nextLoaded.value = false
+      if (expanded.value) await Promise.all([loadHistory(), loadNext()])
+    } else {
+      command.value = null
+      await refresh()
+      emit('changed')
+    }
   } catch (failure) {
     const ambiguous =
       !(failure instanceof ApiError) || failure.status === 0 || failure.status >= 500
@@ -437,8 +488,8 @@ async function execute(action: ExecutionAction, retry = false): Promise<void> {
       : taskError(failure)
     if (!ambiguous) {
       command.value = null
-      await refresh()
-      emit('changed')
+      await refresh(true)
+      if (!props.calendarData) emit('changed')
       accessFailure(failure)
     }
   } finally {
@@ -511,7 +562,7 @@ watch(
     task.value = value
     if (!props.trash) {
       void loadOccurrence()
-      void loadNext()
+      if (!props.calendarData) void loadNext()
       void loadRules()
     }
   },
@@ -524,7 +575,16 @@ watch(
   },
 )
 watch(date, () => {
-  if (!command.value && task.value.execution_type !== 'one_time') void loadOccurrence()
+  if (command.value || task.value.execution_type === 'one_time') return
+  if (
+    props.calendarData &&
+    date.value !== props.selectedDate &&
+    /^\d{4}-\d{2}-\d{2}$/.test(date.value)
+  ) {
+    emit('calendarDate', date.value)
+    return
+  }
+  void loadOccurrence()
 })
 onBeforeUnmount(() => {
   closeMenu()
@@ -641,6 +701,9 @@ onBeforeUnmount(() => {
         :status="shownStatus"
         :date="date"
         :timezone="timezone"
+        :calendar-reviews="calendarReviews"
+        @review-changed="emit('reviewChanged', $event)"
+        @calendar-read="emit('calendarRead', $event)"
         :disabled="disabled || loading || Boolean(command)"
         @busy="setBusy"
         @changed="emit('changed')"
@@ -692,7 +755,7 @@ onBeforeUnmount(() => {
         class="task-quick"
         type="button"
         :disabled="disabled"
-        @click="refresh"
+        @click="refresh(true)"
       >
         Reîncarcă taskul
       </button>
@@ -778,7 +841,7 @@ onBeforeUnmount(() => {
             class="projects-text-button"
             type="button"
             :disabled="disabled"
-            @click="refresh"
+            @click="refresh(true)"
           >
             Reîncarcă starea
           </button>

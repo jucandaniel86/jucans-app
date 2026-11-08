@@ -34,7 +34,7 @@ class ProjectProgressNoteController extends Controller
 
     public function store(StoreProjectProgressNoteRequest $request, Project $project): JsonResponse
     {
-        return (new ProjectProgressNoteResource($this->notes->create($request->user(), $project, $request->validated())))
+        return $this->mutationResource($request, $project, $this->notes->create($request->user(), $project, $request->validated()))
             ->response()->setStatusCode(201);
     }
 
@@ -47,7 +47,7 @@ class ProjectProgressNoteController extends Controller
 
     public function update(UpdateProjectProgressNoteRequest $request, Project $project, ProjectProgressNote $note): ProjectProgressNoteResource
     {
-        return new ProjectProgressNoteResource($this->notes->update($request->user(), $project, $note, $request->validated()));
+        return $this->mutationResource($request, $project, $this->notes->update($request->user(), $project, $note, $request->validated()));
     }
 
     public function destroy(Request $request, Project $project, ProjectProgressNote $note): JsonResponse
@@ -59,7 +59,18 @@ class ProjectProgressNoteController extends Controller
 
     public function restore(Request $request, Project $project, ProjectProgressNote $note): ProjectProgressNoteResource
     {
-        return new ProjectProgressNoteResource($this->notes->restore($request->user(), $project, $note));
+        return $this->mutationResource($request, $project, $this->notes->restore($request->user(), $project, $note));
+    }
+
+    private function mutationResource(Request $request, Project $project, ProjectProgressNote $note): ProjectProgressNoteResource
+    {
+        if ($note->review !== null) {
+            $task = $project->tasks()->withTrashed()->findOrFail($note->review->task_id)->setRelation('project', $project);
+            $note->setAttribute('review_context', ['mode' => $task->review_mode,
+                'can_create' => app(\App\Services\ProjectTaskReviewService::class)->canCreate($request->user(), $task, $note->review->occurrence)]);
+        }
+
+        return new ProjectProgressNoteResource($note);
     }
 
     private function listing(ListProjectProgressNotesRequest $request, Project $project, bool $trash = false): AnonymousResourceCollection

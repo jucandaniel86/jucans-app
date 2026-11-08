@@ -16,7 +16,7 @@ const props = defineProps<{
   timezone?: string
 }>()
 const emit = defineEmits<{
-  saved: []
+  saved: [note: ProgressNote]
   changed: []
   cancel: []
   busy: [value: boolean]
@@ -165,7 +165,7 @@ defineExpose({ requestClose })
           <ProjectProgressNoteForm
             ref="form"
             v-bind="props"
-            @saved="emit('saved')"
+            @saved="emit('saved', $event)"
             @changed="emit('changed')"
             @busy="emit('busy', $event)"
             @access-changed="emit('accessChanged')"

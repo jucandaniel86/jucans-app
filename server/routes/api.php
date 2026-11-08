@@ -96,6 +96,7 @@ use App\Http\Controllers\Api\ProjectNoteTypeFieldController;
       Route::delete('/collaborators/{collaborator}', [ProjectCollaboratorController::class, 'destroy'])->whereNumber('collaborator');
       Route::put('/collaborators/{collaborator}/tasks', [ProjectCollaboratorController::class, 'grants'])->whereNumber('collaborator');
       Route::get('/tasks/{task}/reviews', [\App\Http\Controllers\Api\ProjectTaskReviewController::class, 'index'])->whereNumber('task');
+      Route::get('/task-calendar', [\App\Http\Controllers\Api\ProjectTaskCalendarController::class, 'index']);
       Route::get('/tasks/deleted', [ProjectTaskController::class, 'deleted']);
       Route::get('/tasks', [ProjectTaskController::class, 'index']);
       Route::post('/tasks', [ProjectTaskController::class, 'store']);

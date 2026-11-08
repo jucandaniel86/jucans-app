@@ -4,12 +4,17 @@ import PencilIcon from '@/components/icons/pencilIcon.vue'
 import ProjectProgressNoteEditor from './ProjectProgressNoteEditor.vue'
 import ProgressNoteContent from './ProgressNoteContent.vue'
 import ProgressNoteValuesDisplay from './ProgressNoteValuesDisplay.vue'
-import { projectProgressApi } from '@/services/projectProgressApi'
+import { onProgressNoteDeleted, projectProgressApi } from '@/services/projectProgressApi'
 import { ApiError } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { displayDate, taskError, taskStates } from '@/utils/projectTasks'
 import type { Project } from '@/types/projects'
-import type { ProjectTask, TaskOccurrence } from '@/types/projectTasks'
+import type {
+  CalendarReviews,
+  CalendarReadRequest,
+  ProjectTask,
+  TaskOccurrence,
+} from '@/types/projectTasks'
 import type { ProgressNote } from '@/types/projectProgress'
 
 const props = defineProps<{
@@ -20,18 +25,27 @@ const props = defineProps<{
   date: string
   timezone: string
   disabled?: boolean
+  calendarReviews?: CalendarReviews
 }>()
-const emit = defineEmits<{ changed: []; busy: [value: boolean]; accessChanged: [] }>()
+const emit = defineEmits<{
+  changed: []
+  busy: [value: boolean]
+  accessChanged: []
+  reviewChanged: [note: ProgressNote]
+  calendarRead: [request: CalendarReadRequest]
+}>()
 const auth = useAuthStore()
 const notes = ref<ProgressNote[]>([])
 const canCreate = ref(false)
 const page = ref(0)
 const lastPage = ref(1)
 const total = ref(0)
-const reviewCount = computed(() =>
-  props.task.review_mode !== 'multiple'
-    ? notes.value.filter(note => !note.deleted_at).length
-    : Math.max(0, total.value - notes.value.filter((note) => note.deleted_at).length),
+const reviewCount = computed(
+  () =>
+    props.calendarReviews?.review_context.active_count ??
+    (props.task.review_mode !== 'multiple'
+      ? notes.value.filter((note) => !note.deleted_at).length
+      : Math.max(0, total.value - notes.value.filter((note) => note.deleted_at).length)),
 )
 const loading = ref(false)
 const error = ref('')
@@ -39,8 +53,13 @@ const dialog = ref<HTMLDialogElement | null>(null)
 const editor = ref(false)
 const editing = ref<ProgressNote>()
 const saving = ref(false)
-const own = computed(() => notes.value.find(note => note.created_by === auth.user?.id &&
-  (!note.deleted_at || props.task.review_mode === 'multiple')))
+const own = computed(() =>
+  notes.value.find(
+    (note) =>
+      note.created_by === auth.user?.id &&
+      (!note.deleted_at || props.task.review_mode === 'multiple'),
+  ),
+)
 const canEdit = computed(
   () => props.project.status === 'active' && own.value && !own.value.deleted_at,
 )
@@ -74,17 +93,46 @@ function reviewTime(value: string): string {
   })
 }
 let sequence = 0
-async function load(more = false): Promise<void> {
+// A deletion in Progress can leave this task's mounted review list and API
+// eligibility stale. Refresh only the panel containing the deleted review.
+const stopNoteDeleted = onProgressNoteDeleted((project, note) => {
+  if (props.calendarReviews) return
+  if (project !== props.project.id || !notes.value.some((value) => value.id === note)) return
+  canCreate.value = false
+  void load()
+})
+async function load(more = false, force = false): Promise<void> {
+  if (props.calendarReviews && !more && !force) {
+    sequence++
+    notes.value = props.calendarReviews.data
+    canCreate.value = props.calendarReviews.review_context.can_create
+    page.value = props.calendarReviews.meta.current_page
+    lastPage.value = props.calendarReviews.meta.last_page
+    total.value = props.calendarReviews.meta.total
+    loading.value = false
+    return
+  }
   const request = ++sequence
   loading.value = true
   error.value = ''
   try {
-    const response = await projectProgressApi.reviews(
-      props.project.id,
-      props.task.id,
-      props.occurrenceKey,
-      more ? page.value + 1 : 1,
-    )
+    const response = props.calendarReviews
+      ? await new Promise<CalendarReviews>((resolve, reject) =>
+          emit('calendarRead', {
+            taskId: props.task.id,
+            kind: 'reviews',
+            key: props.occurrenceKey,
+            page: more ? page.value + 1 : 1,
+            resolve: (value) => resolve(value as CalendarReviews),
+            reject,
+          }),
+        )
+      : await projectProgressApi.reviews(
+          props.project.id,
+          props.task.id,
+          props.occurrenceKey,
+          more ? page.value + 1 : 1,
+        )
     if (request !== sequence) return
     notes.value = more ? [...notes.value, ...response.data] : response.data
     canCreate.value = response.review_context.can_create
@@ -120,18 +168,28 @@ function busy(value: boolean): void {
   saving.value = value
   emit('busy', value)
 }
-function saved(): void {
+function saved(note: ProgressNote): void {
   void closeEditor()
-  void load()
-  emit('changed')
+  if (props.calendarReviews) emit('reviewChanged', note)
+  else {
+    void load()
+    emit('changed')
+  }
+}
+function editorChanged(): void {
+  if (props.calendarReviews) void load(false, true)
+  else emit('changed')
 }
 async function restore(note: ProgressNote): Promise<void> {
   if (props.disabled || saving.value) return
   busy(true)
   try {
-    await projectProgressApi.restoreNote(props.project.id, note.id)
-    await load()
-    emit('changed')
+    const response = await projectProgressApi.restoreNote(props.project.id, note.id)
+    if (props.calendarReviews) emit('reviewChanged', response.data)
+    else {
+      await load()
+      emit('changed')
+    }
   } catch (failure) {
     error.value =
       failure instanceof ApiError && failure.status === 409
@@ -150,6 +208,7 @@ watch(
     props.task.status,
     props.task.review_mode,
     props.task,
+    props.calendarReviews,
   ],
   (value, previous) => {
     const identityChanged = !previous || value[0] !== previous[0] || value[1] !== previous[1]
@@ -168,6 +227,7 @@ watch(
   { immediate: true },
 )
 onBeforeUnmount(() => {
+  stopNoteDeleted()
   sequence++
   dialog.value?.close()
   if (saving.value) emit('busy', false)
@@ -228,7 +288,13 @@ onBeforeUnmount(() => {
         </p>
         <p v-if="loading" class="projects-muted" role="status">Se încarcă review-urile…</p>
         <p v-if="error" class="projects-error" role="alert">{{ error }}</p>
-        <button v-if="error" type="button" class="task-quick" :disabled="loading" @click="load()">
+        <button
+          v-if="error"
+          type="button"
+          class="task-quick"
+          :disabled="loading"
+          @click="load(false, true)"
+        >
           Reîncarcă review-urile
         </button>
         <section v-for="group in authorGroups" :key="group.id" class="task-review-author">
@@ -320,7 +386,7 @@ onBeforeUnmount(() => {
       @saved="saved"
       @cancel="closeEditor"
       @busy="busy"
-      @changed="emit('changed')"
+      @changed="editorChanged"
       @access-changed="emit('accessChanged')"
     />
   </span>
