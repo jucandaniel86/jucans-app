@@ -36,6 +36,9 @@ button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
+html.native-ios :is(input, textarea, select, summary, label, [tabindex], [role='button'], [role='tab']) {
+  -webkit-tap-highlight-color: transparent;
+}
 
 /* WKWebView: suppress double-tap zoom while retaining panning and pinch zoom.
    Cover both page content and controls inside independently scrolling panels. */
@@ -85,6 +88,29 @@ img {
 :focus-visible {
   outline: 3px solid var(--color-primary);
   outline-offset: 3px;
+}
+
+/* Native iOS touch focus is retained for dialog/picker behavior, but is not a
+   keyboard-focus indication. Keyboard/mouse immediately restore the existing CSS. */
+html.native-ios[data-input-modality='touch']
+  :is(button, a[href], input, textarea, select, summary, [tabindex], [role='button'], [role='tab'], dialog):focus,
+html.native-ios[data-input-modality='touch'] .task-status-control:has(select:focus-visible),
+html.native-ios[data-input-modality='touch'] .field-editor__types label:focus-within {
+  outline: none;
+}
+
+html.native-ios[data-input-modality='touch']
+  :is(.app-input__control, .app-textarea__control, .app-select__control):focus {
+  box-shadow: none;
+}
+
+/* Recipe cards have a component-specific focus shadow in addition to outline. */
+html.native-ios[data-input-modality='touch'] .recipe-card:focus-visible {
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+html.native-ios[data-input-modality='touch'] .recipe-card--compact:focus-visible {
+  box-shadow: none;
 }
 
 .app-reveal-enter-active,

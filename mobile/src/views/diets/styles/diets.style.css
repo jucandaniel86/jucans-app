@@ -93,9 +93,11 @@
   cursor: pointer;
 }
 
-.diet-card__delete:hover:not(:disabled) {
-  color: var(--color-error);
-  background: var(--color-error-soft);
+@media (hover: hover) and (pointer: fine) {
+  .diet-card__delete:hover:not(:disabled) {
+    color: var(--color-error);
+    background: var(--color-error-soft);
+  }
 }
 
 .diet-card__delete:disabled {
@@ -119,8 +121,10 @@
   outline-offset: -2px;
 }
 
-.diet-card__link:hover {
-  background: var(--color-surface-soft);
+@media (hover: hover) and (pointer: fine) {
+  .diet-card__link:hover {
+    background: var(--color-surface-soft);
+  }
 }
 
 .diet-card__image {

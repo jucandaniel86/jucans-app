@@ -7,6 +7,16 @@ import ProjectTaskCard from '@/components/projects/ProjectTaskCard.vue'
 import ProjectTaskForm from '@/components/projects/ProjectTaskForm.vue'
 import ProjectProgressNoteEditor from '@/components/projects/ProjectProgressNoteEditor.vue'
 import { ApiError } from '@/services/api'
+import { projectTasksApi } from '@/services/projectTasksApi'
+import { onProgressNoteDeleted, projectProgressApi } from '@/services/projectProgressApi'
+import type { ProgressNote } from '@/types/projectProgress'
+import type {
+  CalendarReviews,
+  CalendarTaskData,
+  CalendarReadRequest,
+  CalendarExecutionResult,
+  TaskOccurrence,
+} from '@/types/projectTasks'
 import { projectDailyTasksApi } from '@/services/projectDailyTasksApi'
 import { projectsApi } from '@/services/projectsApi'
 import { useNotificationStore } from '@/stores/notifications'
@@ -31,6 +41,14 @@ const completedLoading = ref(false)
 const completedError = ref('')
 const completedPage = ref(0)
 const completedLast = ref(1)
+const overduePage = ref(0)
+const overdueLast = ref(1)
+const overdueLoading = ref(false)
+const overdueError = ref('')
+let overdueSequence = 0
+const activePageDirty = ref(false)
+const overduePageDirty = ref(false)
+const completedPageDirty = ref(false)
 const busyCount = ref(0)
 const busy = computed(() => busyCount.value > 0)
 const noteTask = ref<ProjectTask | null>(null)
@@ -53,7 +71,8 @@ const headerDate = computed(() => {
   const weekday = new Date(Date.UTC(year!, month! - 1, day!)).getUTCDay()
   return { label: ['Du', 'Lu', 'Ma', 'Mi', 'Jo', 'Vi', 'Sâ'][weekday], day }
 })
-const rowKey = (row: DailyTaskRow) => `${row.task.id}:${row.occurrence.occurrence_key}`
+const rowKey = (row: DailyTaskRow) =>
+  `${row.task.project_id}:${row.task.id}:${row.occurrence.occurrence_key}`
 const overdueRows = computed(() => rows.value.filter((row) => row.section === 'overdue'))
 const overdueIndex = ref(0)
 const pendingOverdueCommand = ref(false)
@@ -146,30 +165,24 @@ async function load(more = false): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    const response = (
-      await projectDailyTasksApi.list(more ? (data.value?.pagination.page ?? 0) + 1 : 1)
-    ).data
+    const requestedPage = more
+      ? Math.max(1, (data.value?.pagination.page ?? 0) + (activePageDirty.value ? 0 : 1))
+      : 1
+    const response = (await projectDailyTasksApi.list(requestedPage)).data
     if (request !== sequence || disposed) return
-    // Fetch the complete existing active dataset; never restrict carousel to the preview/page.
-    const allRows = [...response.rows]
-    const allProjects = [...response.projects]
-    for (
-      let nextPage = response.pagination.page + 1;
-      nextPage <= response.pagination.last_page;
-      nextPage++
-    ) {
-      const next = (await projectDailyTasksApi.list(nextPage)).data
-      if (request !== sequence || disposed) return
-      if (next.date !== response.date) {
-        void load()
-        return
-      }
-      allRows.push(...next.rows)
-      allProjects.push(...next.projects)
+    if (more && data.value && response.date !== data.value.date) {
+      void refresh()
+      return
     }
-    response.rows = [...new Map(allRows.map((row) => [rowKey(row), row])).values()]
-    response.projects = allProjects
-    response.pagination.page = response.pagination.last_page
+    activePageDirty.value = false
+    if (!more) {
+      overdueSequence++
+      overdueLoading.value = false
+      overdueError.value = ''
+      overduePage.value = response.overdue_pagination?.page ?? 1
+      overdueLast.value = response.overdue_pagination?.last_page ?? 1
+      overduePageDirty.value = false
+    }
     const sameDay = data.value?.date === response.date
     data.value = response
     remember(response.projects)
@@ -178,6 +191,7 @@ async function load(more = false): Promise<void> {
         ? [...new Map([...rows.value, ...response.rows].map((row) => [rowKey(row), row])).values()]
         : response.rows
     if (!sameDay) {
+      completedPageDirty.value = false
       completedRows.value = []
       completedPage.value = 0
     }
@@ -200,13 +214,18 @@ async function loadCompleted(more = false): Promise<void> {
   completedLoading.value = true
   completedError.value = ''
   try {
-    const response = (await projectDailyTasksApi.list(more ? completedPage.value + 1 : 1, true))
-      .data
+    const response = (
+      await projectDailyTasksApi.list(
+        more ? Math.max(1, completedPage.value + (completedPageDirty.value ? 0 : 1)) : 1,
+        true,
+      )
+    ).data
     if (request !== completedSequence || disposed) return
     if (data.value && response.date !== data.value.date) {
       await load()
       if (request !== completedSequence || disposed) return
     }
+    completedPageDirty.value = false
     remember(response.projects)
     completedRows.value = more
       ? [
@@ -237,8 +256,326 @@ async function refresh(): Promise<void> {
   completedRows.value = []
   completedPage.value = 0
   completedLoading.value = false
+  completedPageDirty.value = false
   await load()
   if (completedOpen.value && !disposed) await loadCompleted()
+}
+function reviewsFor(row: DailyTaskRow): CalendarReviews {
+  return (
+    row.reviews ?? {
+      data: [],
+      meta: { current_page: 1, last_page: 1, total: 0 },
+      review_context: {
+        mode: row.task.review_mode ?? 'single',
+        can_create: false,
+        active_count: 0,
+      },
+    }
+  )
+}
+function cardData(row: DailyTaskRow): CalendarTaskData {
+  return {
+    task: row.task,
+    has_schedule: row.has_schedule ?? false,
+    current_rule: row.current_rule ?? null,
+    latest_rule: row.latest_rule ?? null,
+    occurrences: [{ ...row.occurrence, reviews: reviewsFor(row) }],
+  }
+}
+function allRows(): DailyTaskRow[] {
+  return [...rows.value, ...completedRows.value]
+}
+function selectedDate(row: DailyTaskRow): string {
+  return row.occurrence.occurrence_key === 'single' ? date.value : row.occurrence.occurrence_key
+}
+const reviewReads = new WeakMap<DailyTaskRow, number>()
+function reviewChanged(note: ProgressNote): void {
+  if (!note.review || !note.review_context) return
+  for (const row of allRows()) {
+    if (
+      row.task.project_id !== note.project_id ||
+      row.task.id !== note.review.task_id ||
+      row.occurrence.occurrence_key !== note.review.occurrence_key
+    )
+      continue
+    reviewReads.set(row, (reviewReads.get(row) ?? 0) + 1)
+    const previous = reviewsFor(row)
+    const old = previous.data.find((value) => value.id === note.id)
+    const total = previous.meta.total + (old ? 0 : 1)
+    row.reviews = {
+      data: [note, ...previous.data.filter((value) => value.id !== note.id)],
+      meta: { ...previous.meta, total, last_page: Math.max(1, Math.ceil(total / 20)) },
+      review_context: {
+        ...previous.review_context,
+        ...note.review_context,
+        active_count:
+          (previous.review_context.active_count ?? 0) +
+          (note.deleted_at ? 0 : 1) -
+          (old && !old.deleted_at ? 1 : 0),
+      },
+    }
+  }
+}
+async function read(row: DailyTaskRow, request: CalendarReadRequest): Promise<void> {
+  const project = row.task.project_id
+  const key = row.occurrence.occurrence_key
+  const version = sequence
+  const reviewRequest = (reviewReads.get(row) ?? 0) + 1
+  if (request.kind === 'reviews') reviewReads.set(row, reviewRequest)
+  try {
+    let response: unknown
+    if (request.kind === 'history')
+      response = await projectTasksApi.history(
+        project,
+        request.taskId,
+        request.from!,
+        request.to!,
+        request.page,
+      )
+    else if (request.kind === 'next')
+      response = await projectTasksApi.occurrences(
+        project,
+        request.taskId,
+        request.from!,
+        request.to!,
+        request.page,
+      )
+    else if (request.kind === 'reviews') {
+      const result = await projectProgressApi.reviews(
+        project,
+        request.taskId,
+        request.key!,
+        request.page,
+      )
+      if (
+        !disposed &&
+        version === sequence &&
+        reviewRequest === reviewReads.get(row) &&
+        key === row.occurrence.occurrence_key &&
+        allRows().includes(row)
+      ) {
+        const previous = reviewsFor(row)
+        const existing = (request.page ?? 1) > 1 ? previous.data : []
+        const notes = [
+          ...new Map([...existing, ...result.data].map((note) => [note.id, note])).values(),
+        ]
+        row.reviews = {
+          ...result,
+          data: notes,
+          review_context: {
+            ...previous.review_context,
+            ...result.review_context,
+            active_count:
+              result.review_context.mode === 'single'
+                ? notes.filter((note) => !note.deleted_at).length
+                : Math.max(0, result.meta.total - notes.filter((note) => note.deleted_at).length),
+          },
+        }
+        if (row.task.review_mode !== result.review_context.mode)
+          row.task = { ...row.task, review_mode: result.review_context.mode }
+      }
+      response = result
+    } else {
+      await refresh()
+      response = allRows().find(
+        (value) =>
+          value.task.project_id === project &&
+          value.task.id === request.taskId &&
+          value.occurrence.occurrence_key === key,
+      )
+    }
+    request.resolve(response)
+  } catch (failure) {
+    request.reject(failure)
+  }
+}
+// DELETE keeps its existing 204 contract. Revalidate only the affected review
+// context after a confirmed deletion, never the daily dataset or task status.
+const stopNoteDeleted = onProgressNoteDeleted((project, note) => {
+  for (const row of allRows()) {
+    if (row.task.project_id !== project || !reviewsFor(row).data.some((value) => value.id === note))
+      continue
+    void read(row, {
+      taskId: row.task.id,
+      kind: 'reviews',
+      key: row.occurrence.occurrence_key,
+      page: 1,
+      resolve: () => {},
+      reject: (failure) => {
+        notifications.error(taskError(failure))
+        if (failure instanceof ApiError && [401, 403, 404].includes(failure.status)) accessChanged()
+      },
+    })
+  }
+})
+async function loadOverdue(): Promise<void> {
+  if (overdueLoading.value || busy.value || pendingOverdueCommand.value) return
+  const request = ++overdueSequence
+  const version = sequence
+  overdueLoading.value = true
+  overdueError.value = ''
+  try {
+    const response = (
+      await projectDailyTasksApi.overdue(
+        Math.max(1, overduePage.value + (overduePageDirty.value ? 0 : 1)),
+      )
+    ).data
+    if (request !== overdueSequence || version !== sequence || disposed) return
+    if (response.date !== data.value?.date) {
+      await refresh()
+      return
+    }
+    remember(response.projects)
+    rows.value = [
+      ...new Map([...rows.value, ...response.rows].map((row) => [rowKey(row), row])).values(),
+    ]
+    overduePage.value = response.pagination.page
+    overdueLast.value = response.pagination.last_page
+    overduePageDirty.value = false
+    if (data.value) {
+      data.value.counts.overdue = response.counts.overdue
+      data.value.overdue_pagination = response.overdue_pagination
+    }
+  } catch (failure) {
+    if (request !== overdueSequence || version !== sequence || disposed) return
+    overdueError.value = taskError(failure)
+    if (failure instanceof ApiError && [401, 403, 404].includes(failure.status)) accessChanged()
+  } finally {
+    if (request === overdueSequence && !disposed) overdueLoading.value = false
+  }
+}
+function sortRows(values: DailyTaskRow[]): DailyTaskRow[] {
+  const priority = { urgent: 0, high: 1, medium: 2, low: 3 }
+  const section = { overdue: 0, today: 1, persistent: 2, completed: 3 }
+  return values.sort(
+    (a, b) =>
+      section[a.section] - section[b.section] ||
+      priority[a.task.priority] - priority[b.task.priority] ||
+      (a.task.due_date ?? a.task.scheduled_date ?? '9999-12-31').localeCompare(
+        b.task.due_date ?? b.task.scheduled_date ?? '9999-12-31',
+      ) ||
+      a.task.id - b.task.id,
+  )
+}
+function occurrenceChanged(result: CalendarExecutionResult): void {
+  const row = allRows().find(
+    (value) =>
+      value.task.project_id === result.task.project_id &&
+      value.task.id === result.task.id &&
+      value.occurrence.occurrence_key === result.data.occurrence_key,
+  )
+  if (
+    !row ||
+    !data.value ||
+    today(data.value.timezone) !== data.value.date ||
+    (result.task.execution_type !== 'one_time' &&
+      (result.data.occurrence_key !== data.value.date ||
+        row.occurrence.is_scheduled === undefined)) ||
+    result.task.scheduled_date !== row.task.scheduled_date ||
+    result.task.due_date !== row.task.due_date ||
+    result.task.scheduled_time !== row.task.scheduled_time ||
+    result.task.due_time !== row.task.due_time ||
+    result.task.deleted_at ||
+    result.task.status === 'archived' ||
+    !result.task.show_in_daily_widget
+  ) {
+    void refresh()
+    return
+  }
+  reviewReads.set(row, (reviewReads.get(row) ?? 0) + 1)
+  const oldSection = row.section
+  const wasDone = row.occurrence.status === 'done'
+  const done = result.data.status === 'done'
+  const scheduled = row.occurrence.is_scheduled === true
+  row.task = result.task
+  row.occurrence = { ...row.occurrence, ...result.data }
+  const previous = reviewsFor(row)
+  row.reviews = {
+    ...previous,
+    review_context: { ...previous.review_context, ...result.review_context },
+  }
+  let next: DailyTaskRow['section'] | null
+  if (done) next = 'completed'
+  else if (row.task.execution_type === 'persistent') next = 'persistent'
+  else if (row.task.execution_type === 'recurring') next = 'today'
+  else {
+    const deadline = row.task.due_date ?? row.task.scheduled_date
+    const time = row.task.due_date !== null ? row.task.due_time : row.task.scheduled_time
+    const now = new Intl.DateTimeFormat('en-GB', {
+      timeZone: data.value.timezone,
+      hourCycle: 'h23',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date())
+    const overdue =
+      deadline !== null &&
+      (deadline < date.value || (deadline === date.value && time !== null && time < now))
+    next = overdue
+      ? 'overdue'
+      : row.task.scheduled_date === date.value || row.task.due_date === date.value
+        ? 'today'
+        : null
+  }
+  rows.value = rows.value.filter((value) => rowKey(value) !== rowKey(row))
+  completedRows.value = completedRows.value.filter((value) => rowKey(value) !== rowKey(row))
+  if (next) {
+    row.section = next
+    if (next === 'completed') completedRows.value = sortRows([...completedRows.value, row])
+    else rows.value = sortRows([...rows.value, row])
+  }
+  if (scheduled) data.value.summary.completed += Number(done) - Number(wasDone)
+  if (oldSection !== next) {
+    data.value.counts[oldSection] = Math.max(0, data.value.counts[oldSection] - 1)
+    if (next) data.value.counts[next]++
+    const active = (section: DailyTaskRow['section'] | null) =>
+      section === 'today' || section === 'persistent'
+    if (active(oldSection) || active(next)) activePageDirty.value = true
+    if (oldSection === 'overdue' || next === 'overdue') overduePageDirty.value = true
+    if (oldSection === 'completed' || next === 'completed') completedPageDirty.value = true
+    data.value.pagination.total = data.value.counts.today + data.value.counts.persistent
+    data.value.pagination.last_page = Math.max(1, Math.ceil(data.value.pagination.total / 20))
+    overdueLast.value = Math.max(1, Math.ceil(data.value.counts.overdue / 10))
+    completedLast.value = Math.max(1, Math.ceil(data.value.counts.completed / 20))
+  }
+}
+async function selectOccurrence(row: DailyTaskRow, selected: string): Promise<void> {
+  // Preserve the existing explicit execution-date picker. Arrow navigation never calls this.
+  if (busy.value || selected === row.occurrence.occurrence_key) return
+  setBusy(true)
+  const version = sequence
+  try {
+    const [occurrence, reviews] = await Promise.all([
+      (row.task.execution_type === 'recurring'
+        ? projectTasksApi
+            .occurrences(row.task.project_id, row.task.id, selected, selected)
+            .then((response) => ({ data: response.data[0] ?? null }))
+        : projectTasksApi.occurrence(row.task.project_id, row.task.id, selected)
+      ).catch((failure) => {
+        if (failure instanceof ApiError && failure.status === 404) return { data: null }
+        throw failure
+      }),
+      projectProgressApi.reviews(row.task.project_id, row.task.id, selected),
+    ])
+    if (disposed || version !== sequence || !allRows().includes(row)) return
+    row.occurrence =
+      occurrence.data ??
+      ({
+        id: null,
+        occurrence_key: selected,
+        scheduled_date: selected,
+        scheduled_time: row.task.scheduled_time,
+        status: 'pending',
+        lock_version: 0,
+        is_recorded: false,
+        is_scheduled: false,
+      } as TaskOccurrence)
+    row.reviews = reviews
+  } catch (failure) {
+    notifications.error(taskError(failure))
+    if (failure instanceof ApiError && [401, 403, 404].includes(failure.status)) accessChanged()
+  } finally {
+    setBusy(false)
+  }
 }
 function closeEditor(): void {
   noteTask.value = null
@@ -297,19 +634,39 @@ async function openCreate(): Promise<void> {
 }
 onBeforeRouteLeave(() => !busy.value)
 function checkDate(): void {
-  if (!busy.value && data.value && today(data.value.timezone) !== data.value.date) void refresh()
+  if (
+    !busy.value &&
+    !loading.value &&
+    !pendingOverdueCommand.value &&
+    !document.querySelector('dialog[open]') &&
+    data.value &&
+    today(data.value.timezone) !== data.value.date
+  )
+    void refresh()
+}
+function foreground(): void {
+  if (
+    document.visibilityState === 'visible' &&
+    !busy.value &&
+    !loading.value &&
+    !pendingOverdueCommand.value &&
+    !document.querySelector('dialog[open]')
+  )
+    void refresh()
 }
 let dateTimer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   void load()
-  document.addEventListener('visibilitychange', checkDate)
+  document.addEventListener('visibilitychange', foreground)
   dateTimer = setInterval(checkDate, 60_000)
 })
 onBeforeUnmount(() => {
+  stopNoteDeleted()
+  overdueSequence++
   disposed = true
   sequence++
   completedSequence++
-  document.removeEventListener('visibilitychange', checkDate)
+  document.removeEventListener('visibilitychange', foreground)
   clearInterval(dateTimer)
 })
 </script>
@@ -399,9 +756,13 @@ onBeforeUnmount(() => {
       />
       <button v-else class="task-quick" type="button" @click="closeEditor">Închide</button>
     </div>
-    <section v-if="currentOverdue" class="daily-tasks__group" aria-label="Taskuri restante">
+    <section
+      v-if="currentOverdue || (data?.counts.overdue ?? 0) > 0"
+      class="daily-tasks__group"
+      aria-label="Taskuri restante"
+    >
       <header class="daily-tasks__carousel-heading">
-        <h3>Restante · {{ overdueRows.length }}</h3>
+        <h3>Restante · {{ data?.counts.overdue ?? overdueRows.length }}</h3>
         <nav v-if="overdueRows.length > 1" aria-label="Navigare restante">
           <button
             type="button"
@@ -427,6 +788,7 @@ onBeforeUnmount(() => {
         </nav>
       </header>
       <article
+        v-if="currentOverdue"
         class="daily-tasks__row daily-tasks__row--overdue daily-tasks__slide"
         @pointerdown="swipeStart"
         @pointerup="swipeEnd"
@@ -445,6 +807,12 @@ onBeforeUnmount(() => {
               : currentOverdue.occurrence.occurrence_key
           "
           :calendar-occurrence="currentOverdue.occurrence"
+          :calendar-reviews="reviewsFor(currentOverdue)"
+          :calendar-data="cardData(currentOverdue)"
+          @review-changed="reviewChanged"
+          @occurrence-changed="occurrenceChanged"
+          @calendar-read="read(currentOverdue!, $event)"
+          @calendar-date="selectOccurrence(currentOverdue!, $event)"
           :locked="busy || loading"
           compact
           widget-compact
@@ -469,6 +837,20 @@ onBeforeUnmount(() => {
           </template>
         </ProjectTaskCard>
       </article>
+      <p v-if="overdueError" class="projects-error" role="alert">{{ overdueError }}</p>
+      <button
+        v-if="
+          overdueError ||
+          overduePage < overdueLast ||
+          (!currentOverdue && (data?.counts.overdue ?? 0) > 0)
+        "
+        class="task-quick"
+        type="button"
+        :disabled="busy || loading || overdueLoading || pendingOverdueCommand"
+        @click="loadOverdue"
+      >
+        {{ overdueLoading ? 'Se încarcă…' : 'Încarcă încă 10 restante' }}
+      </button>
     </section>
     <template v-for="section in sections" :key="section.key">
       <section v-if="visible.some((row) => row.section === section.key)" class="daily-tasks__group">
@@ -491,8 +873,14 @@ onBeforeUnmount(() => {
             :project="projects[row.task.project_id]!"
             :task="row.task"
             :timezone="data?.timezone ?? 'UTC'"
-            :selected-date="date"
+            :selected-date="selectedDate(row)"
             :calendar-occurrence="row.occurrence"
+            :calendar-reviews="reviewsFor(row)"
+            :calendar-data="cardData(row)"
+            @review-changed="reviewChanged"
+            @occurrence-changed="occurrenceChanged"
+            @calendar-read="read(row, $event)"
+            @calendar-date="selectOccurrence(row, $event)"
             :locked="busy"
             compact
             @busy="setBusy"
@@ -507,7 +895,11 @@ onBeforeUnmount(() => {
       Nu ai taskuri de făcut pentru astăzi.
     </p>
     <button
-      v-if="!expanded && rows.filter((row) => row.section !== 'overdue').length > 5"
+      v-if="
+        !expanded &&
+        ((data?.pagination.total ?? 0) > 5 ||
+          rows.filter((row) => row.section !== 'overdue').length > 5)
+      "
       class="daily-tasks__footer-link"
       type="button"
       :disabled="busy"
@@ -559,8 +951,14 @@ onBeforeUnmount(() => {
           :project="projects[row.task.project_id]!"
           :task="row.task"
           :timezone="data?.timezone ?? 'UTC'"
-          :selected-date="date"
+          :selected-date="selectedDate(row)"
           :calendar-occurrence="row.occurrence"
+          :calendar-reviews="reviewsFor(row)"
+          :calendar-data="cardData(row)"
+          @review-changed="reviewChanged"
+          @occurrence-changed="occurrenceChanged"
+          @calendar-read="read(row, $event)"
+          @calendar-date="selectOccurrence(row, $event)"
           :locked="busy"
           compact
           @busy="setBusy"

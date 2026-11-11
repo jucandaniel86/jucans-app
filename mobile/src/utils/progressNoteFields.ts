@@ -4,6 +4,11 @@ import type {
   NoteFieldValue,
 } from '@/types/projectProgress'
 
+// String-only formatting: preserve every significant digit and the stored decimal.
+export function compactNoteNumber(value: string): string {
+  if (!/^-?\d+\.\d+$/.test(value)) return value
+  return value.replace(/0+$/, '').replace(/\.$/, '')
+}
 export function scaledNoteNumber(value: string): bigint | null {
   if (!/^-?\d{1,12}(\.\d{1,6})?$/.test(value)) return null
   const [whole, fraction = ''] = value.replace(/^-/, '').split('.')

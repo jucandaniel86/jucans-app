@@ -6,6 +6,7 @@ import jucansPlaceholder from '@/assets/jucans_logo.png'
 import AppButton from '@/components/ui/AppButton.vue'
 import PencilIcon from '@/components/icons/pencilIcon.vue'
 import { foodApi } from '@/services/foodApi'
+import { useAuthStore } from '@/stores/auth'
 import { useAddRecipeToShoppingList } from '@/composables/useAddRecipeToShoppingList'
 import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
 import ShoppingListAccess from '@/components/shopping/ShoppingListAccess.vue'
@@ -13,6 +14,7 @@ import { shoppingListName } from '@/utils/shoppingPresentation'
 import type { FoodUnit, RecipeDetail } from '@/types/food'
 import { recipeIngredientLabel } from '@/utils/recipePresentation'
 
+const authStore = useAuthStore()
 const route = useRoute()
 const shopping = useActiveShoppingListStore()
 const router = useRouter()
@@ -129,6 +131,7 @@ onBeforeUnmount(() => {
             </svg>
           </AppButton>
           <RouterLink
+            v-if="authStore.user?.is_admin"
             class="recipe-detail__icon-action"
             :to="{ name: 'recipe-edit', params: { id: recipe.id } }"
             :aria-label="`Editează rețeta ${recipe.name}`"
@@ -351,9 +354,12 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.recipe-detail__author:hover {
-  color: #111;
-  background: #f0f0f0;
+
+@media (hover: hover) and (pointer: fine) {
+  .recipe-detail__author:hover {
+    color: #111;
+    background: #f0f0f0;
+  }
 }
 
 .recipe-detail__ingredients-heading {

@@ -1,0 +1,33 @@
+/* Shared by Projects' date/time pairs. WebKit's native editor has an intrinsic
+   inline size; both the grid item and the native control must be shrinkable. */
+.task-form__columns.project-date-columns,
+.configured-chart-range.project-date-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+.project-date-columns > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.project-date-columns input:is([type='date'], [type='time']) {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
+}
+.project-date-columns input::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: start;
+}
+.project-date-columns input::-webkit-datetime-edit {
+  min-width: 0;
+  padding: 0;
+}

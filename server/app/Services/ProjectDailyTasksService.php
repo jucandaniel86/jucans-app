@@ -8,6 +8,7 @@ use App\Enums\ProjectTaskOccurrenceStatus as State;
 use App\Http\Resources\ProjectResource;
 use App\Http\Resources\ProjectTaskOccurrenceResource;
 use App\Http\Resources\ProjectTaskResource;
+use App\Http\Resources\ProjectTaskScheduleVersionResource;
 use App\Models\ProjectTask;
 use App\Models\ProjectTaskCompletionEvent;
 use App\Models\ProjectTaskOccurrence;
@@ -95,7 +96,13 @@ class ProjectDailyTasksService
                 } else {
                     $section = 'today';
                 }
-                $rows->push(['section' => $section, 'task' => (new ProjectTaskResource($task))->resolve(),
+                $currentRule = $task->scheduleVersions->first(fn ($version) => $version->effective_from <= $date
+                    && ($version->effective_until === null || $version->effective_until > $date));
+                $latestRule = $task->scheduleVersions->sortByDesc('version')->first();
+                $rows->push(['section' => $section,
+                    'has_schedule' => $task->scheduleVersions->isNotEmpty(),
+                    'current_rule' => $currentRule ? (new ProjectTaskScheduleVersionResource($currentRule))->resolve() : null,
+                    'latest_rule' => $latestRule ? (new ProjectTaskScheduleVersionResource($latestRule))->resolve() : null, 'task' => (new ProjectTaskResource($task))->resolve(),
                     'occurrence' => (new ProjectTaskOccurrenceResource($occurrence))->resolve()]);
                 if (! isset($projects[$task->project_id])) {
                     $project = clone $task->project;
@@ -105,19 +112,43 @@ class ProjectDailyTasksService
             }
         });
         $counts = collect(['overdue', 'today', 'persistent', 'completed'])->mapWithKeys(fn ($section) => [$section => $rows->where('section', $section)->count()])->all();
-        $completed = ($input['section'] ?? 'active') === 'completed';
-        $filtered = $rows->filter(fn ($row) => ($row['section'] === 'completed') === $completed);
+        $section = $input['section'] ?? 'active';
         $priority = ['urgent' => 0, 'high' => 1, 'medium' => 2, 'low' => 3];
         $order = ['overdue' => 0, 'today' => 1, 'persistent' => 2, 'completed' => 3];
-        $filtered = $filtered->sortBy(fn ($row) => [$order[$row['section']], $priority[$row['task']['priority']],
+        $sorted = $rows->sortBy(fn ($row) => [$order[$row['section']], $priority[$row['task']['priority']],
             $row['task']['due_date'] ?? $row['task']['scheduled_date'] ?? '9999-12-31', $row['task']['id']])->values();
         $page = (int) ($input['page'] ?? 1);
-        $perPage = (int) ($input['per_page'] ?? 20);
+        $perPage = $section === 'overdue' ? 10 : (int) ($input['per_page'] ?? 20);
+        $overdue = $sorted->where('section', 'overdue')->values();
+        $filtered = $section === 'active'
+            ? $sorted->whereIn('section', ['today', 'persistent'])->values()
+            : $sorted->where('section', $section)->values();
         $visible = $filtered->forPage($page, $perPage)->values();
+        // Active pagination is independent of overdue pagination. Only page 1
+        // includes the first ten overdue rows; subsequent reads are explicit.
+        if ($section === 'active' && $page === 1) {
+            $visible = $overdue->take(10)->concat($visible)->values();
+        }
+        $tasks = ProjectTask::query()->visibleTo($user)->whereIn('id', $visible->pluck('task.id'))->with('project')->get();
+        $visible = $visible->filter(fn ($row) => $tasks->contains('id', $row['task']['id']))->values();
+        $occurrences = $visible->map(function ($row) {
+            $occurrence = new ProjectTaskOccurrence([...$row['occurrence'], 'task_id' => $row['task']['id']]);
+            $occurrence->exists = $row['occurrence']['is_recorded'];
+
+            return $occurrence;
+        });
+        $reviews = app(ProjectTaskReviewService::class)->forOccurrences($user, $tasks, $occurrences);
+        $visible = $visible->map(fn ($row) => [...$row,
+            'reviews' => $reviews[$row['task']['id'].':'.$row['occurrence']['occurrence_key']],
+        ]);
 
         return ['date' => $date, 'timezone' => $timezone, 'summary' => $summary, 'counts' => $counts,
             'rows' => $visible->all(),
             'projects' => array_values(array_intersect_key($projects, array_flip($visible->pluck('task.project_id')->all()))),
-            'pagination' => ['page' => $page, 'last_page' => max(1, (int) ceil($filtered->count() / $perPage)), 'total' => $filtered->count()]];
+            'pagination' => ['page' => $page, 'per_page' => $perPage,
+                'last_page' => max(1, (int) ceil($filtered->count() / $perPage)), 'total' => $filtered->count()],
+            'overdue_pagination' => ['page' => $section === 'overdue' ? $page : 1, 'per_page' => 10,
+                'last_page' => max(1, (int) ceil($overdue->count() / 10)), 'total' => $overdue->count()],
+        ];
     }
 }

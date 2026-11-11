@@ -294,10 +294,14 @@
   cursor: pointer;
   font-size: 0.9rem;
 }
-.projects-actions__menu a:hover,
-.projects-actions__menu button:hover {
-  background: var(--color-surface-soft);
+
+@media (hover: hover) and (pointer: fine) {
+  .projects-actions__menu a:hover,
+  .projects-actions__menu button:hover {
+    background: var(--color-surface-soft);
+  }
 }
+
 .projects-actions__menu button:disabled {
   opacity: 0.5;
   cursor: wait;

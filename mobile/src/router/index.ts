@@ -76,9 +76,24 @@ const router = createRouter({
           meta: { requiresAdmin: true, shoppingList: 'hidden' },
         },
         { path: 'shopping-lists', name: 'shopping-lists', component: ShoppingListsView },
-        { path: 'diets-lists', name: 'diets-lists', component: DietsListsView },
-        { path: 'diets/:id', name: 'diet-detail', component: DietDetailView },
-        { path: 'diets/:id/edit', name: 'diet-edit', component: DietsEditView },
+        {
+          path: 'diets-lists',
+          name: 'diets-lists',
+          component: DietsListsView,
+          meta: { requiresAdmin: true },
+        },
+        {
+          path: 'diets/:id',
+          name: 'diet-detail',
+          component: DietDetailView,
+          meta: { requiresAdmin: true },
+        },
+        {
+          path: 'diets/:id/edit',
+          name: 'diet-edit',
+          component: DietsEditView,
+          meta: { requiresAdmin: true },
+        },
         {
           path: 'shopping-lists/:id',
           name: 'shopping-list-detail',
@@ -106,6 +121,7 @@ const router = createRouter({
           path: 'recipes/create',
           name: 'recipe-create',
           component: AddRecipeView,
+          meta: { requiresAdmin: true },
         },
         {
           path: 'recipes/random',
@@ -116,6 +132,7 @@ const router = createRouter({
           path: 'recipes/:id/edit',
           name: 'recipe-edit',
           component: AddRecipeView,
+          meta: { requiresAdmin: true },
         },
         {
           path: 'recipes/:id',

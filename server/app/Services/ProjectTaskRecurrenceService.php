@@ -78,8 +78,17 @@ class ProjectTaskRecurrenceService
             return null;
         }
         $date = $day->toDateString();
-        $version = $task->scheduleVersions->first(fn ($version) => $version->effective_from <= $date
-            && ($version->effective_until === null || $version->effective_until > $date));
+        $version = $task->scheduleVersions->first(function ($version) use ($date) {
+            $effectiveFrom = $version->effective_from;
+            // Older initial rules started at save time. Extend only their lower
+            // bound in memory; the exclusive upper bound still separates versions.
+            if ($version->version === 1 && $version->start_date !== null && $version->start_date < $effectiveFrom) {
+                $effectiveFrom = $version->start_date;
+            }
+
+            return $effectiveFrom <= $date
+                && ($version->effective_until === null || $version->effective_until > $date);
+        });
         if ($version === null || ($version->start_date !== null && $date < $version->start_date)
             || ($version->end_date !== null && $date > $version->end_date) || $date < $version->anchor_date) {
             return null;

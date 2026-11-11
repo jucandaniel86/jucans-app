@@ -9,8 +9,10 @@ import type { Author } from '@/types/authors'
 import { dietsApi } from '@/services/dietsApi'
 import type { DailyStructureConfig } from '@/types/diets'
 import { foodApi } from '@/services/foodApi'
+import { useAuthStore } from '@/stores/auth'
 import type { FoodTag, PaginationMeta, RecipeSummary } from '@/types/food'
 
+const authStore = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const tags = ref<FoodTag[]>([])
@@ -318,6 +320,7 @@ onBeforeUnmount(() => {
         <h1>Rețetele noastre</h1>
       </div>
       <RouterLink
+        v-if="authStore.user?.is_admin"
         class="recipes-page__add"
         :to="{ name: 'recipe-create' }"
         aria-label="Adaugă rețetă"
@@ -479,8 +482,12 @@ onBeforeUnmount(() => {
 
     <div v-else-if="recipes.length === 0" class="recipes-state">
       <h2>Încă nu avem rețete <span aria-hidden="true">🍳</span></h2>
-      <p>Adaugă prima rețetă a familiei.</p>
-      <RouterLink class="recipes-state__add" :to="{ name: 'recipe-create' }">
+      <p v-if="authStore.user?.is_admin">Adaugă prima rețetă a familiei.</p>
+      <RouterLink
+        v-if="authStore.user?.is_admin"
+        class="recipes-state__add"
+        :to="{ name: 'recipe-create' }"
+      >
         + Adaugă rețetă
       </RouterLink>
     </div>

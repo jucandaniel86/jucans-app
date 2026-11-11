@@ -8,9 +8,11 @@
 
 Primary reference: https://ebarooni.github.io/capacitor-calendar/
 
-Only the existing Task Add/Edit form changes: one unchecked checkbox, using the
-existing `task-check` style. It is shown only on iOS/Android when the native plugin
-is registered. Browser behavior is unchanged; the plugin's web/ICS path is unused.
+Add/Edit exposes one unchecked checkbox using the existing `task-check` style.
+TaskCard also exposes “Adaugă în calendar” in its existing menu for any user who
+can view the task, including read-only collaborators. Both call the same service.
+These actions appear only on iOS/Android when the native plugin is registered.
+Browser behavior is unchanged; the plugin's web/ICS path is unused.
 No backend, API, database or recurrence-rule changes are required.
 
 ## Save and native behavior
@@ -36,31 +38,38 @@ for this intent-only flow, and no direct calendar-provider APIs are called.
 
 ## Date, time and recurrence
 
-- One-time/persistent tasks use their saved `scheduled_date` and `scheduled_time`,
-  never today's date and never `due_date` as an invented start/end.
-- If the date is missing, the task still saves; a warning explains why Calendar
-  wasn't opened. A time-only value cannot silently become an event today.
-- Timed values are parsed as local device calendar components, not UTC date strings.
-  Invalid dates and times in a DST gap are rejected rather than silently shifted.
-  Jucans has no event-duration field, so the draft end equals its start; the native
-  editor lets the user choose a duration. No default hour is invented by Jucans.
-- Date-only tasks are all-day. iOS gets local midnight boundaries through the next
-  local day (calendar arithmetic, including 23/25-hour DST days). Android INSERT
-  receives UTC midnight boundaries built from the same date components, as required
-  by all-day calendar encoding; this is not a conversion of local midnight.
-- Recurring tasks require one concrete date: the occurrence selected in the task
-  card, or an explicitly saved scheduled date. The existing occurrence GET endpoint
-  must return that exact key/date; its snapshot supplies the time. A recurrence
-  start date alone is not used to guess an occurrence. Unverifiable/missing
-  occurrences produce a warning after the Jucans save.
-- A new/changed rule does not create a series. No recurrence parameter is sent to
-  the native API, and no upcoming occurrences are enumerated. If a rule edit takes
-  effect tomorrow, an older selected occurrence still uses its actual snapshot.
+- One-time tasks use the saved task/occurrence scheduled date. TaskCard exports
+  recurring and persistent tasks for the displayed contextual date, using the
+  already loaded occurrence's scheduled time and deadline where available.
+  Add/Edit uses its explicit occurrence date or saved scheduled date.
+- Start always comes from `scheduled_date` / `scheduled_time`, never from the
+  current clock or the recurrence's `start_date`. Missing dates block export.
+- End uses `due_date` / `due_time`, including the selected recurring occurrence's
+  snapshot. The recurring rule's `end_date` is never an event boundary.
+- For timed events, an end time without an end date belongs to the start date.
+  A date-only deadline includes that whole day (exclusive next local midnight).
+  A missing end, or an end not strictly later than start, defaults to a one-hour
+  draft. The user can adjust it in the native editor; task data is not changed.
+- Without a start time the event is all-day. `due_date` is its inclusive last
+  day; absent/earlier deadlines fall back to a single day. A deadline time alone
+  does not invent a start time. iOS receives local midnight to exclusive next
+  midnight. Android INSERT receives UTC boundaries constructed from the same
+  calendar date components, not converted from local midnight.
+- Local component parsing rejects invalid dates/times, including DST gaps.
+  Calendar-day arithmetic is used for all-day and date-only end boundaries.
+- TaskCard requires an eligible recurring context: a scheduled virtual occurrence
+  or an existing recorded occurrence. It passes that snapshot without HTTP reads.
+  Add/Edit retains its existing point lookup after a successful save to verify
+  the concrete recurring occurrence. No series, future enumeration or recurrence
+  parameter is sent to the native editor.
+- Existing snapshots retain their historical time/deadline. Neither export path
+  modifies task status, permissions, recurrence, or external event identifiers.
 
 ## Duplicates and limitations
 
 The checkbox always starts unchecked and is consumed before a single native call.
-Ordinary edits do not recreate events. Cancellation/failure is not retried
+Ordinary edits do not recreate events. Each TaskCard menu invocation is a new
+explicit export and can create a duplicate; there is no deduplication. Cancellation/failure is not retried
 implicitly; reopening/editing requires checking the box explicitly again.
 
 This is an export action, not synchronization. Intentionally checking the box again

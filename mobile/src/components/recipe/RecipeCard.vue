@@ -509,9 +509,12 @@ function editRecipe(): void {
   transition: background-color 120ms;
 }
 
-.recipe-card--compact:hover {
-  background: #fafafa;
+@media (hover: hover) and (pointer: fine) {
+  .recipe-card--compact:hover {
+    background: #fafafa;
+  }
 }
+
 .recipe-card--compact:active {
   transform: none;
 }
@@ -636,12 +639,16 @@ function editRecipe(): void {
   height: 14px;
   stroke-width: 1.5;
 }
-.recipe-row__actions > button:hover:not(:disabled),
-.recipe-row__actions > a:hover,
-a.recipe-row__credit:hover {
-  color: #111;
-  background: #f0f0f0;
+
+@media (hover: hover) and (pointer: fine) {
+  .recipe-row__actions > button:hover:not(:disabled),
+  .recipe-row__actions > a:hover,
+  a.recipe-row__credit:hover {
+    color: #111;
+    background: #f0f0f0;
+  }
 }
+
 .recipe-row__actions > button:focus-visible,
 .recipe-row__actions > a:focus-visible,
 .recipe-row__credit:focus-visible {

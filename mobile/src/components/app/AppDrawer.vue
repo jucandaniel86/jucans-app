@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import AvatarPicker from '@/components/user/AvatarPicker.vue'
@@ -25,6 +25,13 @@ const emit = defineEmits<{
 const closeButton = ref<HTMLButtonElement | null>(null)
 const pickerOpen = ref(false)
 const authStore = useAuthStore()
+
+const visibleSections = computed(() =>
+  MENU_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => !item.restricted || authStore.user?.is_admin),
+  })).filter((section) => section.items.length > 0),
+)
 
 function canAccessMenuItem(item: MenuItem): boolean {
   return Boolean(item.routeName && !item.soon && (!item.restricted || authStore.user?.is_admin))
@@ -86,7 +93,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
     </header>
 
     <nav class="app-drawer__nav" aria-label="Secțiuni">
-      <template v-for="section in MENU_SECTIONS" :key="section.id">
+      <template v-for="section in visibleSections" :key="section.id">
         <div v-if="section.dividerBefore" class="app-drawer__divider" />
 
         <div class="app-drawer__section" :class="{ 'app-drawer__section--grouped': section.label }">

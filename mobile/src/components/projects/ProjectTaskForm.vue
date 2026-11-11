@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import './projectDateInputs.css'
 import { computed, onMounted, reactive, ref } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
@@ -7,7 +8,7 @@ import AppSelect from '@/components/ui/AppSelect.vue'
 import { ApiError } from '@/services/api'
 import { projectTasksApi } from '@/services/projectTasksApi'
 import { addSavedTaskToPhoneCalendar, phoneCalendarAvailable } from '@/services/taskPhoneCalendar'
-import { useNotificationStore } from '@/stores/notifications'
+import { useNotificationStore, type ConfirmOptions } from '@/stores/notifications'
 import type { Project } from '@/types/projects'
 import type {
   ProjectTask,
@@ -23,6 +24,8 @@ const props = defineProps<{
   task?: ProjectTask
   initialDate?: string
   occurrenceDate?: string
+  initialSchedule?: TaskSchedule | null
+  confirm?: (options: ConfirmOptions) => Promise<boolean>
 }>()
 const emit = defineEmits<{
   saved: [task: ProjectTask]
@@ -96,8 +99,10 @@ async function loadSchedule(): Promise<void> {
   loadFailed.value = false
   error.value = ''
   try {
-    const response = await projectTasksApi.scheduleVersions(props.project.id, initial.id)
-    latest.value = response.data[0] ?? null
+    latest.value =
+      props.initialSchedule !== undefined
+        ? props.initialSchedule
+        : ((await projectTasksApi.scheduleVersions(props.project.id, initial.id)).data[0] ?? null)
     const value = latest.value
     if (value)
       Object.assign(rule, {
@@ -138,7 +143,7 @@ async function save(): Promise<void> {
     if (
       scheduleChanged &&
       latest.value &&
-      !(await notifications.confirm({
+      !(await (props.confirm ?? notifications.confirm)({
         title: 'Actualizezi recurența?',
         message: 'Modificările se aplică de mâine. Execuțiile și istoricul existente se păstrează.',
         confirmText: 'Actualizează',
@@ -294,11 +299,11 @@ onMounted(loadSchedule)
       >
         <summary>Programare, termen și afișare (opțional)</summary>
         <div class="task-fields">
-          <div class="task-form__columns">
+          <div class="task-form__columns project-date-columns">
             <label>Data programată<input v-model="form.scheduled_date" type="date" /></label
             ><label>Ora programată<input v-model="form.scheduled_time" type="time" /></label>
           </div>
-          <div class="task-form__columns">
+          <div class="task-form__columns project-date-columns">
             <label>Termen-limită<input v-model="form.due_date" type="date" /></label
             ><label>Ora-limită<input v-model="form.due_time" type="time" /></label>
           </div>
@@ -339,7 +344,7 @@ onMounted(loadSchedule)
       <p v-if="rule.recurrence_type === 'monthly'" class="projects-muted">
         Lunile fără ziua aleasă (29, 30 sau 31) sunt omise.
       </p>
-      <div class="task-form__columns">
+      <div class="task-form__columns project-date-columns">
         <label>Începe la (opțional)<input v-model="rule.start_date" type="date" /></label
         ><label>Se termină la (opțional)<input v-model="rule.end_date" type="date" /></label>
       </div>

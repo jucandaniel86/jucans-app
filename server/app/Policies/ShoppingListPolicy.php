@@ -22,6 +22,13 @@ class ShoppingListPolicy
         return (int) $list->created_by === (int) $user->id;
     }
 
+    public function leave(User $user, ShoppingList $list): bool
+    {
+        return (int) $list->created_by !== (int) $user->id
+            && $list->visibility === 'shared'
+            && $list->users()->whereKey($user->id)->exists();
+    }
+
     public function changeVisibility(User $user, ShoppingList $list): bool
     {
         return $this->manageSharing($user, $list);

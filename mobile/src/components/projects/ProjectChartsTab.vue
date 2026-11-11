@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import './projectDateInputs.css'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import ProjectConfiguredChart from '@/components/projects/ProjectConfiguredChart.vue'
@@ -87,7 +88,7 @@ onBeforeUnmount(() => {
 <template>
   <section class="configured-charts" aria-label="Charts">
     <h3>Charts</h3>
-    <div class="configured-chart-range">
+    <div class="configured-chart-range project-date-columns">
       <label>De la<input v-model="start" type="date" :aria-invalid="Boolean(invalid)" /></label
       ><label>Până la<input v-model="end" type="date" :aria-invalid="Boolean(invalid)" /></label>
     </div>

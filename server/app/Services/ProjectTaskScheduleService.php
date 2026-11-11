@@ -27,7 +27,9 @@ class ProjectTaskScheduleService
             if ($previous !== null) {
                 $effective->addDay();
             }
-            $from = $effective->toDateString();
+            $from = $previous === null
+                ? ($input['start_date'] ?? $effective->toDateString())
+                : $effective->toDateString();
             abort_if($previous !== null && $from < $previous->effective_from, 409, 'The new effective date cannot precede the latest version.');
             if (isset($input['end_date'], $input['start_date']) && $input['end_date'] < $input['start_date']) {
                 throw ValidationException::withMessages(['end_date' => 'The end date must not precede the start date.']);

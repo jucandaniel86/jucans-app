@@ -101,8 +101,10 @@ defineEmits<{
   background: var(--color-text);
 }
 
-.app-header__menu:hover {
-  background: var(--color-primary-soft);
+@media (hover: hover) and (pointer: fine) {
+  .app-header__menu:hover {
+    background: var(--color-primary-soft);
+  }
 }
 
 .app-header__menu:active {

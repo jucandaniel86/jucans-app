@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import { CapacitorCalendar } from '@ebarooni/capacitor-calendar'
 import { projectTasksApi } from '@/services/projectTasksApi'
-import type { ProjectTask } from '@/types/projectTasks'
+import type { ProjectTask, TaskOccurrence } from '@/types/projectTasks'
 
 export function phoneCalendarAvailable(): boolean {
   return (
@@ -40,11 +40,12 @@ function localStart(date: string, time: string | null): Date {
   return value
 }
 
-/** Called only after the task AND any changed recurrence rule have been saved. */
+/** Exports one saved task/occurrence; callers may supply an already loaded snapshot. */
 export async function addSavedTaskToPhoneCalendar(
   projectId: number,
   task: ProjectTask,
   occurrenceDate?: string,
+  loadedOccurrence?: TaskOccurrence,
 ): Promise<'saved' | 'cancelled' | 'unconfirmed'> {
   if (!phoneCalendarAvailable())
     throw new Error('Calendarul telefonului nu este disponibil în acest build.')
@@ -54,40 +55,68 @@ export async function addSavedTaskToPhoneCalendar(
     )
   presenting = true
   try {
-    let date = task.scheduled_date
+    let date =
+      task.execution_type === 'one_time'
+        ? task.scheduled_date
+        : (occurrenceDate ?? task.scheduled_date)
     let time = task.scheduled_time
+    let dueDate = task.due_date
+    let dueTime = task.due_time
+    let selected = loadedOccurrence
     if (task.execution_type === 'recurring') {
-      date = occurrenceDate || task.scheduled_date
       if (!date)
         throw new Error(
           'Nu există o apariție concretă selectată. Regula recurentă nu a fost exportată în calendar.',
         )
-      const { data } = await projectTasksApi.occurrence(projectId, task.id, date)
-      if (data.occurrence_key !== date || data.scheduled_date !== date) {
+      if (selected && !selected.id && selected.is_scheduled !== true)
+        throw new Error('Nu există o apariție eligibilă pentru această zi.')
+      // Add/Edit verifies its saved rule. TaskCard supplies the batch-loaded snapshot
+      // and never performs an additional read to export an occurrence.
+      selected ??= (await projectTasksApi.occurrence(projectId, task.id, date)).data
+      if (selected.occurrence_key !== date || selected.scheduled_date !== date)
         throw new Error('Apariția recurentă nu a putut fi identificată fără ambiguitate.')
-      }
-      time = data.scheduled_time
+    }
+    if (selected) {
+      const expectedKey = task.execution_type === 'one_time' ? 'single' : date
+      if (selected.occurrence_key !== expectedKey)
+        throw new Error('Apariția selectată nu corespunde datei exportate.')
+      date = selected.scheduled_date ?? date
+      time = selected.scheduled_time
+      dueDate = selected.due_date === undefined ? task.due_date : selected.due_date
+      dueTime = selected.due_time === undefined ? task.due_time : selected.due_time
     }
     if (!date) throw new Error('Taskul nu are dată programată; nu a fost adăugat în calendar.')
     const start = localStart(date, time)
     const allDay = time === null
     let startDate = start.getTime()
-    let endDate = startDate // No duration is stored for tasks; the native editor can adjust it.
+    let endDate: number
     if (allDay) {
+      // due_date is an inclusive last day, never the recurring series end_date.
+      const lastDay = dueDate ? localStart(dueDate, null) : new Date(start)
+      if (lastDay < start) lastDay.setTime(start.getTime())
       if (Capacitor.getPlatform() === 'android') {
-        // Android's calendar intent encodes date-only boundaries at UTC midnight.
-        // Copy the date components; never convert a local midnight to a UTC date.
+        // INSERT expects UTC date components for all-day exclusive boundaries.
         const utc = new Date(0)
         utc.setUTCFullYear(start.getFullYear(), start.getMonth(), start.getDate())
         utc.setUTCHours(0, 0, 0, 0)
         startDate = utc.getTime()
+        utc.setUTCFullYear(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate())
         utc.setUTCDate(utc.getUTCDate() + 1)
         endDate = utc.getTime()
       } else {
-        const end = new Date(start)
-        end.setDate(end.getDate() + 1)
-        endDate = end.getTime()
+        lastDay.setDate(lastDay.getDate() + 1)
+        endDate = lastDay.getTime()
       }
+    } else {
+      let end: Date | null = null
+      if (dueTime !== null) end = localStart(dueDate ?? date, dueTime)
+      else if (dueDate) {
+        // A date-only deadline includes that full calendar day.
+        end = localStart(dueDate, null)
+        end.setDate(end.getDate() + 1)
+      }
+      // Without a usable end, prefill a one-hour draft, editable in the native UI.
+      endDate = end && end > start ? end.getTime() : startDate + 60 * 60 * 1000
     }
     if (Capacitor.getPlatform() === 'ios') {
       const { result } = await CapacitorCalendar.requestWriteOnlyCalendarAccess()

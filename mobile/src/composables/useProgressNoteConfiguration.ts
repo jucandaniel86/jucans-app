@@ -8,7 +8,12 @@ import type {
   NoteFieldValue,
   ProgressNote,
 } from '@/types/projectProgress'
-import { sameNoteValue, scaledNoteNumber, validateNoteField } from '@/utils/progressNoteFields'
+import {
+  compactNoteNumber,
+  sameNoteValue,
+  scaledNoteNumber,
+  validateNoteField,
+} from '@/utils/progressNoteFields'
 
 export function useProgressNoteConfiguration(projectId: number, initial?: ProgressNote) {
   const types = ref<ProjectNoteType[]>([])
@@ -17,9 +22,13 @@ export function useProgressNoteConfiguration(projectId: number, initial?: Progre
   const current = ref<NoteCurrentState | null>(initial?.current_configuration_state ?? null)
   const values = reactive<Record<number, NoteFieldValue>>({})
   const originals = new Map((initial?.values ?? []).map((item) => [item.field_id, item.value]))
-  for (const field of fields.value) values[field.field_id] = originals.get(field.field_id) ?? null
+  for (const field of fields.value) {
+    const saved = originals.get(field.field_id) ?? null
+    values[field.field_id] =
+      field.definition.type === 'number' && typeof saved === 'string' ? compactNoteNumber(saved) : saved
+  }
   const typesLoading = ref(!initial)
-  const fieldsLoading = ref(false)
+  const fieldsLoading = ref(Boolean(initial?.note_type_id && initial.configuration))
   const typesError = ref('')
   const fieldsError = ref(
     initial?.note_type_id && !initial.configuration
@@ -62,6 +71,23 @@ export function useProgressNoteConfiguration(projectId: number, initial?: Progre
         }),
     }
   }
+  async function configuredFields(id: number): Promise<NoteConfigurationField[]> {
+    const associations = await api.noteTypeFields(projectId, id)
+    const applicable = associations.data.filter(
+      (row) => row.field.project_id === projectId && !row.field.archived_at,
+    )
+    return Promise.all(
+      applicable.map(async (row) => ({
+        field_id: row.field_id,
+        association_id: row.id,
+        required: row.required,
+        sort_order: row.sort_order,
+        definition: row.field,
+        options:
+          row.field.type === 'select' ? (await api.options(projectId, row.field_id)).data : [],
+      })),
+    )
+  }
   async function selectType(id: number | null): Promise<void> {
     if (initial?.note_type_id) return
     const request = ++sequence
@@ -77,21 +103,7 @@ export function useProgressNoteConfiguration(projectId: number, initial?: Progre
     }
     fieldsLoading.value = true
     try {
-      const associations = await api.noteTypeFields(projectId, id)
-      const applicable = associations.data.filter(
-        (row) => row.field.project_id === projectId && !row.field.archived_at,
-      )
-      const configured = await Promise.all(
-        applicable.map(async (row) => ({
-          field_id: row.field_id,
-          association_id: row.id,
-          required: row.required,
-          sort_order: row.sort_order,
-          definition: row.field,
-          options:
-            row.field.type === 'select' ? (await api.options(projectId, row.field_id)).data : [],
-        })),
-      )
+      const configured = await configuredFields(id)
       if (disposed || request !== sequence) return
       fields.value = configured
       current.value = {
@@ -119,7 +131,61 @@ export function useProgressNoteConfiguration(projectId: number, initial?: Progre
     }
   }
   async function loadTypes(): Promise<void> {
-    if (initial?.note_type_id) return
+    if (initial?.note_type_id) {
+      if (!initial.configuration) return
+      const request = ++sequence
+      fieldsLoading.value = true
+      fieldsError.value = ''
+      try {
+        const configured = await configuredFields(initial.note_type_id)
+        if (disposed || request !== sequence) return
+        const historical = initial.configuration.fields
+        const capturedIds = new Set(historical.map((field) => field.field_id))
+        const active = new Map(configured.map((field) => [field.field_id, field]))
+        // Keep captured definitions/values, including detached or archived fields.
+        fields.value = [
+          ...historical.map((field) => ({
+            ...field,
+            required: active.get(field.field_id)?.required ?? field.required,
+          })),
+          ...configured.filter((field) => !capturedIds.has(field.field_id)),
+        ]
+        for (const field of fields.value) {
+          // An edit made while configuration is loading must not be overwritten.
+          if (Object.prototype.hasOwnProperty.call(values, field.field_id)) continue
+          const saved = originals.get(field.field_id) ?? null
+          values[field.field_id] =
+            field.definition.type === 'number' && typeof saved === 'string'
+              ? compactNoteNumber(saved)
+              : saved
+        }
+        current.value = {
+          note_type_archived_at: initial.current_configuration_state?.note_type_archived_at ?? null,
+          fields: [
+            ...(initial.current_configuration_state?.fields ?? []).filter(
+              (field) => !active.has(field.field_id),
+            ),
+            ...configured.map((field) => ({
+              field_id: field.field_id,
+              type: field.definition.type,
+              unit: field.definition.unit,
+              archived_at: field.definition.archived_at,
+              options: field.options.map((option) => ({
+                id: option.id,
+                archived_at: option.archived_at,
+              })),
+            })),
+          ],
+        }
+      } catch (failure) {
+        if (!disposed && request === sequence)
+          fieldsError.value =
+            failure instanceof Error ? failure.message : 'Nu am putut încărca câmpurile.'
+      } finally {
+        if (!disposed && request === sequence) fieldsLoading.value = false
+      }
+      return
+    }
     typesLoading.value = true
     typesError.value = ''
     try {

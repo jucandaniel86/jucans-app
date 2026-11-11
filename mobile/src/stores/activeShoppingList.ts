@@ -27,6 +27,7 @@ export const useActiveShoppingListStore = defineStore('active-shopping-list', ()
   const loaded = ref(false)
   const error = ref('')
   const closing = ref(false)
+  const leaving = ref(false)
   const creating = ref(false)
   const addingItem = ref(false)
   const addingRecipe = ref(false)
@@ -37,6 +38,7 @@ export const useActiveShoppingListStore = defineStore('active-shopping-list', ()
   const removalBlocked = computed(
     () =>
       closing.value ||
+      leaving.value ||
       creating.value ||
       addingItem.value ||
       addingRecipe.value ||
@@ -100,6 +102,7 @@ export const useActiveShoppingListStore = defineStore('active-shopping-list', ()
     itemErrors.value = {}
     creating.value = false
     closing.value = false
+    leaving.value = false
     addingItem.value = false
     addingRecipe.value = false
     removingRecipeId.value = null
@@ -449,6 +452,23 @@ export const useActiveShoppingListStore = defineStore('active-shopping-list', ()
       if (session === sessionRevision) closing.value = false
     }
   }
+  async function leaveList(target: ShoppingListSummary): Promise<void> {
+    const userId = auth.user?.id
+    if (!userId || target.is_creator || !target.is_shared_with_me || busy.value)
+      throw new Error('Lista nu poate fi părăsită acum.')
+    const session = sessionRevision
+    leaving.value = true
+    try {
+      await shoppingApi.detachUser(target.id, userId)
+      if (session !== sessionRevision) return
+      // Invalidate older reads so they cannot restore the removed membership locally.
+      invalidateRequests()
+      openLists.value = openLists.value.filter((candidate) => candidate.id !== target.id)
+      if (selectedId.value === target.id || list.value?.id === target.id) clearSelection()
+    } finally {
+      if (session === sessionRevision) leaving.value = false
+    }
+  }
   watch(() => auth.user?.id, reset, { flush: 'sync' })
   return {
     list,
@@ -484,5 +504,6 @@ export const useActiveShoppingListStore = defineStore('active-shopping-list', ()
     removeRecipe,
     addManualItem,
     closeCurrent,
+    leaveList,
   }
 })

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Project;
+use App\Models\ProjectNoteTypeField;
 use App\Models\ProjectProgressNote;
 use App\Models\ProjectProgressNoteValue;
 use Illuminate\Validation\ValidationException;
@@ -30,12 +31,8 @@ class ProjectProgressNoteValuesService
             $snapshot = [
                 'schema_version' => 1,
                 'note_type' => $type->only(['id', 'project_id', 'name', 'description', 'template', 'is_default', 'archived_at']),
-                'fields' => $type->fields->filter(fn ($period) => $period->field->archived_at === null)->map(fn ($period) => [
-                    'field_id' => $period->field_id, 'association_id' => $period->id,
-                    'required' => $period->required, 'sort_order' => $period->sort_order,
-                    'definition' => $period->field->only(['id', 'project_id', 'key', 'name', 'description', 'type', 'unit', 'min', 'max', 'step', 'aggregation', 'archived_at']),
-                    'options' => $period->field->options->map(fn ($option) => $option->only(['id', 'field_id', 'label', 'sort_order', 'archived_at']))->all(),
-                ])->values()->all(),
+                'fields' => $type->fields->filter(fn ($period) => $period->field->archived_at === null)
+                    ->map(fn ($period) => $this->captureField($period))->values()->all(),
             ];
             $note->forceFill(['note_type_id' => $type->id, 'configuration_snapshot' => $snapshot, 'configuration_captured_at' => now('UTC')])->save();
             $capturedContext = true;
@@ -48,6 +45,24 @@ class ProjectProgressNoteValuesService
             return false;
         }
         $captured = collect($note->configuration_snapshot['fields'])->keyBy('field_id');
+        $historical = collect($note->configuration_snapshot['fields'])->keyBy('field_id');
+        // Reconcile at save time under the existing project lock; never migrate old notes.
+        $associations = ! $creating && ! $capturedContext
+            ? $project->noteTypes()->with('fields.field.options')->findOrFail($note->note_type_id)->fields
+            : [];
+        foreach ($associations as $association) {
+            if ($association->field->archived_at !== null) {
+                continue;
+            }
+            if ($captured->has($association->field_id)) {
+                // Keep the historical definition; current required applies on this edit only.
+                $captured = $captured->put($association->field_id, [
+                    ...$captured[$association->field_id], 'required' => $association->required,
+                ]);
+            } else {
+                $captured = $captured->put($association->field_id, $this->captureField($association));
+            }
+        }
         $current = $project->customFields()->with('options')->whereIn('id', $captured->keys())->get()->keyBy('id');
         $existing = $note->fieldValues()->get()->keyBy('field_id');
         $merged = $captured->map(fn ($config, $id) => $existing->get($id)?->typedValue())->all();
@@ -86,8 +101,20 @@ class ProjectProgressNoteValuesService
             }
         }
         $changed = $capturedContext;
+        // Only append newly populated fields. Charts require the captured definition,
+        // while existing snapshot entries and their capture timestamp stay untouched.
+        $additions = $captured->filter(fn ($config, $id) => ! $historical->has($id) && $merged[$id] !== null);
+        if ($additions->isNotEmpty()) {
+            $snapshot = $note->configuration_snapshot;
+            $snapshot['fields'] = [...$snapshot['fields'], ...$additions->values()->all()];
+            $note->forceFill(['configuration_snapshot' => $snapshot])->save();
+            $changed = true;
+        }
         $valuedFields = [];
         foreach ($captured as $id => $config) {
+            if (! $historical->has($id) && $merged[$id] === null) {
+                continue;
+            }
             $value = $merged[$id];
             $row = $existing->get($id);
             if (! $row || $row->typedValue() !== $value) {
@@ -108,6 +135,16 @@ class ProjectProgressNoteValuesService
         }
 
         return $changed;
+    }
+
+    private function captureField(ProjectNoteTypeField $association): array
+    {
+        return [
+            'field_id' => $association->field_id, 'association_id' => $association->id,
+            'required' => $association->required, 'sort_order' => $association->sort_order,
+            'definition' => $association->field->only(['id', 'project_id', 'key', 'name', 'description', 'type', 'unit', 'min', 'max', 'step', 'aggregation', 'archived_at']),
+            'options' => $association->field->options->map(fn ($option) => $option->only(['id', 'field_id', 'label', 'sort_order', 'archived_at']))->all(),
+        ];
     }
 
     private function typed(mixed $value, array $config, string $key): string|bool|int|null

@@ -76,10 +76,16 @@
   background: transparent;
   font-size: 0.86rem;
 }
-.app-autocomplete-search__dropdown button:hover,
 .app-autocomplete-search__dropdown button[aria-selected='true'] {
   background: #e3f4ee;
 }
+
+@media (hover: hover) and (pointer: fine) {
+  .app-autocomplete-search__dropdown button:hover {
+    background: #e3f4ee;
+  }
+}
+
 .app-autocomplete-search__dropdown img {
   width: 36px;
   height: 36px;

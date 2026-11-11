@@ -94,7 +94,18 @@ class ProjectTaskController extends Controller
             $query->orderByRaw($priority);
         }
 
-        return ProjectTaskResource::collection($query->orderByDesc('id')
-            ->paginate($validated['per_page'] ?? 20)->withQueryString());
+        $page = $query->orderByDesc('id')->paginate($validated['per_page'] ?? 20)->withQueryString();
+        $contexts = null;
+        if (! $deleted && $request->boolean('include_context')) {
+            $date = $validated['occurrence_date'] ?? now(config('app.timezone'))->toDateString();
+            $contexts = app(\App\Services\ProjectTaskListContextService::class)
+                ->forTasks($request->user(), $project, $page->getCollection(), $date);
+        }
+        $response = ProjectTaskResource::collection($page);
+        if ($contexts !== null) {
+            $response->additional(['contexts' => $contexts]);
+        }
+
+        return $response;
     }
 }

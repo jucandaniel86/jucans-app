@@ -143,9 +143,13 @@ onBeforeUnmount(() => observer?.disconnect())
   font-size: 1.35rem;
   cursor: pointer;
 }
-.app-notification button:hover {
-  background: rgb(21 36 61 / 6%);
+
+@media (hover: hover) and (pointer: fine) {
+  .app-notification button:hover {
+    background: rgb(21 36 61 / 6%);
+  }
 }
+
 .notification-enter-active,
 .notification-leave-active,
 .notification-move {

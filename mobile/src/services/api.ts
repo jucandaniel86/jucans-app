@@ -20,7 +20,7 @@ export class ApiError extends Error {
   }
 }
 
-const apiBaseUrl =  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '')
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '')
 
 let accessToken: string | null = null
 let unauthorizedHandler: (() => void | Promise<void>) | null = null
@@ -125,8 +125,8 @@ async function requestText(path: string): Promise<{ text: string; status: number
 }
 
 export const api = {
-  get<T>(path: string): Promise<T> {
-    return request<T>(path)
+  get<T>(path: string, options: Pick<RequestOptions, 'signal'> = {}): Promise<T> {
+    return request<T>(path, options)
   },
 
   post<T>(path: string, body?: unknown): Promise<T> {

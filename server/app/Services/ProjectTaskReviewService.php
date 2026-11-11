@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\ProjectStatus;
 use App\Enums\ProjectTaskOccurrenceStatus;
+use App\Http\Resources\ProjectProgressNoteResource;
 use App\Models\Project;
 use App\Models\ProjectProgressNote;
 use App\Models\ProjectTask;
@@ -40,6 +41,47 @@ class ProjectTaskReviewService
         }
 
         return true;
+    }
+
+    /** Batch the same review resources/visibility/order as PERF-01 for daily rows.
+     *  All reservations participate in eligibility; only 20 visible notes are expanded.
+     */
+    public function forOccurrences(User $user, Collection $tasks, Collection $occurrences): array
+    {
+        $tasks = $tasks->keyBy('id');
+        $reservations = ProjectTaskReview::query()->whereIn('occurrence_id', $occurrences->pluck('id')->filter())
+            ->with('note:id,created_by,deleted_at')->get()->groupBy('occurrence_id');
+        $visible = ProjectProgressNote::withTrashed()->visibleTo($user)
+            ->whereIn('id', $reservations->flatten(1)->pluck('note_id'))
+            ->where(fn ($q) => $q->whereNull('deleted_at')->orWhere('created_by', $user->id))
+            ->get(['id', 'created_by', 'deleted_at'])->keyBy('id');
+        $pages = [];
+        $noteIds = collect();
+        foreach ($reservations as $id => $rows) {
+            $task = $tasks->get($rows->first()->task_id);
+            $page = $rows->map(fn ($row) => $visible->get($row->note_id))->filter()
+                ->sortBy(fn ($note) => [$task->review_mode === 'single' && $note->trashed() ? 1 : 0,
+                    $note->created_by == $user->id ? 0 : 1, $note->id])->values();
+            $pages[$id] = $page;
+            $noteIds = $noteIds->merge($page->take(20)->pluck('id'));
+        }
+        $notes = ProjectProgressNote::withTrashed()->whereIn('id', $noteIds)
+            ->with(app(ProjectProgressNoteService::class)->relations($user))->get()->keyBy('id');
+        $result = [];
+        foreach ($occurrences as $occurrence) {
+            $task = $tasks->get($occurrence->task_id);
+            $rows = $reservations->get($occurrence->id, collect());
+            $page = $pages[$occurrence->id] ?? collect();
+            $result[$task->id.':'.$occurrence->occurrence_key] = [
+                'data' => $page->take(20)->map(fn ($note) => (new ProjectProgressNoteResource($notes->get($note->id)))->resolve())->values()->all(),
+                'meta' => ['current_page' => 1, 'last_page' => max(1, (int) ceil($page->count() / 20)), 'total' => $page->count()],
+                'review_context' => ['mode' => $task->review_mode,
+                    'can_create' => $this->canCreate($user, $task, $occurrence->exists ? $occurrence : null, $rows),
+                    'active_count' => $rows->filter(fn ($row) => $row->note !== null && ! $row->note->trashed())->count()],
+            ];
+        }
+
+        return $result;
     }
 
     // Caller already holds the parent project lock inside the note transaction.

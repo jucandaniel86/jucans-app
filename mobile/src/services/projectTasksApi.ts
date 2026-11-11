@@ -4,6 +4,7 @@ import type { ProjectStatus } from '@/types/projects'
 import type {
   ExecutionAction,
   CalendarExecutionResult,
+  CalendarTaskData,
   TaskCalendarResponse,
   ProjectTask,
   TaskCompletionEvent,
@@ -23,12 +24,18 @@ export const projectTasksApi = {
       `/projects/${project}/task-calendar?${new URLSearchParams({ start_date: startDate, end_date: endDate })}`,
     )
   },
-  list(project: number, filters: TaskFilters, trash = false): Promise<TaskPage<ProjectTask>> {
+  list(
+    project: number,
+    filters: TaskFilters,
+    trash = false,
+    options?: { signal?: AbortSignal },
+  ): Promise<TaskPage<ProjectTask> & { contexts?: Record<number, CalendarTaskData> }> {
     const query = new URLSearchParams({ sort: 'overdue', per_page: '10' })
     Object.entries(filters).forEach(([key, value]) => {
-      if (value !== undefined && value !== '') query.set(key, String(value))
+      if (value !== undefined && value !== '')
+        query.set(key, typeof value === 'boolean' ? String(Number(value)) : String(value))
     })
-    return api.get(`${base(project)}${trash ? '/deleted' : ''}?${query}`)
+    return api.get(`${base(project)}${trash ? '/deleted' : ''}?${query}`, options)
   },
   get(project: number, task: number): Promise<ResourceItem<ProjectTask>> {
     return api.get(base(project, task))

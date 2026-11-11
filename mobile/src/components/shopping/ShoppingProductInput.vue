@@ -283,8 +283,14 @@ input {
   margin: 0;
   font-size: 0.8rem;
 }
-.shopping-product-results button[aria-selected='true'],
-.shopping-product-results button:hover {
+.shopping-product-results button[aria-selected='true'] {
   background: var(--color-primary-soft);
 }
+
+@media (hover: hover) and (pointer: fine) {
+  .shopping-product-results button:hover {
+    background: var(--color-primary-soft);
+  }
+}
+
 </style>

@@ -130,13 +130,15 @@ use App\Http\Controllers\Api\ProjectNoteTypeFieldController;
 
     Route::get('/config/food', FoodConfigController::class);
     Route::get('/food-tags', [FoodTagController::class, 'index']);
-    Route::post('/food-tags', [FoodTagController::class, 'store']);
-    Route::patch('/food-tags/{foodTag}', [FoodTagController::class, 'update']);
+    Route::post('/food-tags', [FoodTagController::class, 'store'])->middleware('admin');
+    Route::patch('/food-tags/{foodTag}', [FoodTagController::class, 'update'])->middleware('admin');
     Route::post('/ingredients/resolve', IngredientResolverController::class);
     Route::get('/ingredients/search', [IngredientController::class, 'search']);
-    Route::post('/ingredients/aliases', [IngredientAliasController::class, 'store']);
+    Route::post('/ingredients/aliases', [IngredientAliasController::class, 'store'])->middleware('admin');
     Route::get('/authors', [AuthorController::class, 'index']);
-    Route::apiResource('recipes', RecipeController::class);
+    Route::apiResource('recipes', RecipeController::class)->only(['index', 'show']);
+    Route::apiResource('recipes', RecipeController::class)
+      ->only(['store', 'update', 'destroy'])->middleware('admin');
     Route::get('/shopping-items/suggestions', [\App\Http\Controllers\Api\ShoppingItemSuggestionController::class, 'index']);
     Route::get('/shopping-categories', [ShoppingCategoryController::class, 'index']);
     Route::get('/shopping-lists/active', [ShoppingListController::class, 'active']);
@@ -161,12 +163,13 @@ use App\Http\Controllers\Api\ProjectNoteTypeFieldController;
     Route::post('/shopping-lists/{shoppingList}/users', [ShoppingListSharingController::class, 'store']);
     Route::delete('/shopping-lists/{shoppingList}/users/{user}', [ShoppingListSharingController::class, 'destroy']);
 
-    Route::prefix('diets')->group(function () {
+    // Used by Recipes filters as well as the admin-only Diets screens.
+    Route::get('/diets/daily-structures', [DietController::class, 'dailyStructures']);
+    Route::prefix('diets')->middleware('admin')->group(function () {
       Route::get('/', [DietController::class, 'index']);
       Route::post('/', [DietController::class, 'store']);
 
       #daily structure
-      Route::get('/daily-structures', [DietController::class, 'dailyStructures']);
       Route::post('/{diet}/daily-structure', [DietController::class, 'addDailyStructure']);
       Route::patch('/{diet}/daily-structure/{item}/order', [DietController::class, 'changeDailyStructureOrder']);
       Route::delete('/{diet}/daily-structure/{item}', [DietController::class, 'deleteDailyStructure']);

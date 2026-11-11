@@ -37,6 +37,7 @@ const detailError = ref('')
 const exporting = ref(false)
 const sharingBusy = ref(false)
 const confirmDialog = ref<HTMLDialogElement | null>(null)
+const participantMenu = ref<HTMLDetailsElement | null>(null)
 let request = 0
 const list = computed(() =>
   route.params.id &&
@@ -125,6 +126,28 @@ async function useList(): Promise<void> {
   }
 }
 
+async function leaveList(): Promise<void> {
+  const target = list.value
+  if (!target?.is_shared_with_me || target.is_creator || shopping.busy || sharingBusy.value) return
+  if (participantMenu.value) participantMenu.value.open = false
+  const confirmed = await notifications.confirm({
+    title: 'Părăsești lista?',
+    message: 'Lista rămâne disponibilă proprietarului și celorlalți participanți.',
+    confirmText: 'Părăsește lista',
+    cancelText: 'Renunță',
+  })
+  if (!confirmed || list.value?.id !== target.id) return
+  try {
+    await shopping.leaveList(target)
+    request++
+    detail.value = null
+    notifications.success('Ai părăsit lista de cumpărături.')
+    await router.replace({ name: 'shopping-lists' })
+  } catch (failure) {
+    notifications.error(actionErrorMessage(failure, 'Nu am putut părăsi lista. Încearcă din nou.'))
+  }
+}
+
 async function closeList(): Promise<void> {
   if (
     !canClose.value ||
@@ -156,6 +179,16 @@ watch(tab, () => {
     <header class="shopping-list__header">
       <div class="shopping-list__title-row">
         <h1>{{ list ? shoppingListName(list) : 'Lista de cumpărături' }}</h1>
+        <details
+          v-if="!loading && !error && list?.is_shared_with_me && !list.is_creator"
+          ref="participantMenu"
+          class="shopping-list__participant-menu"
+        >
+          <summary aria-label="Acțiuni listă" title="Acțiuni listă">⋮</summary>
+          <button type="button" :disabled="shopping.busy || sharingBusy" @click="leaveList">
+            Părăsește lista
+          </button>
+        </details>
         <ShoppingListSharing
           v-if="!loading && !error && list?.is_creator"
           :key="list.id"
@@ -308,12 +341,52 @@ watch(tab, () => {
   line-height: 1;
   text-decoration: none;
 }
-.shopping-list__dismiss:hover {
-  background: color-mix(in srgb, var(--color-error) 14%, var(--color-surface));
+
+@media (hover: hover) and (pointer: fine) {
+  .shopping-list__dismiss:hover {
+    background: color-mix(in srgb, var(--color-error) 14%, var(--color-surface));
+  }
 }
+
 .shopping-list__dismiss:focus-visible {
   outline: 2px solid var(--color-error);
   outline-offset: 2px;
+}
+.shopping-list__participant-menu {
+  position: relative;
+}
+.shopping-list__participant-menu summary {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  list-style: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: 1.5rem;
+}
+.shopping-list__participant-menu summary::-webkit-details-marker {
+  display: none;
+}
+.shopping-list__participant-menu button {
+  position: absolute;
+  z-index: 2;
+  top: 100%;
+  right: 0;
+  width: max-content;
+  max-width: 70vw;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-error);
+  font: inherit;
+  cursor: pointer;
+}
+.shopping-list__participant-menu button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 .shopping-list__title-row {
   display: flex;

@@ -223,11 +223,11 @@ watch(
           <template v-else-if="summary">
             <dl class="project-detail__metrics">
               <div>
-                <dt>Active:</dt>
+                <dt>Taskuri active:</dt>
                 <dd>{{ summary.completion.remaining_tasks }}</dd>
               </div>
               <div>
-                <dt>Finalizate:</dt>
+                <dt>Taskuri încheiate:</dt>
                 <dd>{{ summary.completion.completed_tasks }}</dd>
               </div>
             </dl>

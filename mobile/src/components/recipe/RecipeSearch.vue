@@ -228,10 +228,16 @@ onBeforeUnmount(() => {
   background: transparent;
   font-size: 0.86rem;
 }
-.recipe-search__dropdown button:hover,
 .recipe-search__dropdown button[aria-selected='true'] {
   background: #e3f4ee;
 }
+
+@media (hover: hover) and (pointer: fine) {
+  .recipe-search__dropdown button:hover {
+    background: #e3f4ee;
+  }
+}
+
 .recipe-search__dropdown img {
   width: 36px;
   height: 36px;

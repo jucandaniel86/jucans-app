@@ -9,11 +9,19 @@ import ProjectTaskCard from '@/components/projects/ProjectTaskCard.vue'
 import ProjectTaskForm from '@/components/projects/ProjectTaskForm.vue'
 import ProjectTaskCalendar from '@/components/projects/ProjectTaskCalendar.vue'
 import ProjectTaskViewToggle from '@/components/projects/ProjectTaskViewToggle.vue'
+import { projectProgressApi } from '@/services/projectProgressApi'
+import type { ProgressNote } from '@/types/projectProgress'
 import { projectTasksApi } from '@/services/projectTasksApi'
 import { ApiError } from '@/services/api'
 import type { Project, ProjectExecutionType, ProjectStatus } from '@/types/projects'
-import type { ProjectTask, TaskPriority } from '@/types/projectTasks'
-import { taskError, taskPriorities, taskTypes } from '@/utils/projectTasks'
+import type {
+  ProjectTask,
+  TaskPriority,
+  CalendarTaskData,
+  CalendarReadRequest,
+  CalendarExecutionResult,
+} from '@/types/projectTasks'
+import { taskError, taskPriorities, taskTypes, today } from '@/utils/projectTasks'
 
 const props = withDefaults(
   defineProps<{
@@ -44,6 +52,8 @@ const groups = reactive(
     type,
     open: true,
     tasks: [] as ProjectTask[],
+    contexts: {} as Record<number, CalendarTaskData>,
+    contextDate: today(props.timezone),
     loading: false,
     error: '',
     page: 0,
@@ -65,28 +75,53 @@ const priorities = [
 ]
 let timer: ReturnType<typeof setTimeout> | undefined
 let disposed = false
+const inFlight = new Map<ProjectExecutionType, { key: string; controller: AbortController }>()
+function cancelLoads(): void {
+  for (const entry of inFlight.values()) entry.controller.abort()
+  inFlight.clear()
+  for (const group of groups) {
+    group.sequence++
+    group.loading = false
+  }
+}
 function busy(value: boolean): void {
   busyCount.value = Math.max(0, busyCount.value + (value ? 1 : -1))
   emit('busy', locked.value)
 }
 async function load(group: (typeof groups)[number], more = false): Promise<void> {
+  const date = today(props.timezone)
+  const page = more ? group.page + 1 : 1
+  const filters = {
+    execution_type: group.type,
+    search: search.value.trim(),
+    status: status.value ? (status.value as ProjectStatus) : undefined,
+    priority: priority.value ? (priority.value as TaskPriority) : undefined,
+    page,
+    ...(!trash.value ? { include_context: true, occurrence_date: date } : {}),
+  }
+  const identity = JSON.stringify([props.project.id, trash.value, filters])
+  const previous = inFlight.get(group.type)
+  if (previous?.key === identity) return
+  previous?.controller.abort()
+  const controller = new AbortController()
+  inFlight.set(group.type, { key: identity, controller })
   const request = ++group.sequence
   group.loading = true
   group.error = ''
   group.retryMore = more
   try {
-    const response = await projectTasksApi.list(
-      props.project.id,
-      {
-        execution_type: group.type,
-        search: search.value.trim(),
-        status: status.value ? (status.value as ProjectStatus) : undefined,
-        priority: priority.value ? (priority.value as TaskPriority) : undefined,
-        page: more ? group.page + 1 : 1,
-      },
-      trash.value,
+    const response = await projectTasksApi.list(props.project.id, filters, trash.value, {
+      signal: controller.signal,
+    })
+    if (request !== group.sequence || disposed || controller.signal.aborted) return
+    if (
+      !trash.value &&
+      (!response.contexts ||
+        response.data.some((task) => !response.contexts?.[task.id]?.occurrences[0]?.reviews))
     )
-    if (request !== group.sequence || disposed) return
+      throw new ApiError('Nu am putut încărca toate datele taskurilor. Reîncearcă.', 503)
+    group.contexts = more ? { ...group.contexts, ...response.contexts } : (response.contexts ?? {})
+    group.contextDate = date
     group.tasks = more
       ? [...new Map([...group.tasks, ...response.data].map((task) => [task.id, task])).values()]
       : response.data
@@ -94,7 +129,7 @@ async function load(group: (typeof groups)[number], more = false): Promise<void>
     group.lastPage = response.meta.last_page
     group.total = response.meta.total
   } catch (failure) {
-    if (request === group.sequence && !disposed) {
+    if (request === group.sequence && !disposed && !controller.signal.aborted) {
       group.error = taskError(failure)
       if (failure instanceof ApiError && [403, 404].includes(failure.status)) {
         group.tasks = []
@@ -102,6 +137,7 @@ async function load(group: (typeof groups)[number], more = false): Promise<void>
       }
     }
   } finally {
+    if (inFlight.get(group.type)?.controller === controller) inFlight.delete(group.type)
     if (request === group.sequence && !disposed) group.loading = false
   }
 }
@@ -114,6 +150,7 @@ function reload(): void {
   for (const group of groups) void load(group)
 }
 function changed(): void {
+  cancelLoads()
   reload()
   emit('changed')
 }
@@ -137,18 +174,19 @@ function switchTrash(): void {
   status.value = ''
   creating.value = false
 }
-watch(search, () => {
+watch(search, (value, previous) => {
+  if (value.trim() === previous.trim()) return
+  cancelLoads()
   clearTimeout(timer)
   timer = setTimeout(reload, 300)
 })
-watch(mode, () => {
-  if (mode.value === 'list') reload()
-})
 watch(
-  [status, priority, trash, () => props.project.id, () => props.project.status],
+  [mode, status, priority, trash, () => props.project.id, () => props.project.status],
   () => {
+    cancelLoads()
     for (const group of groups) {
       group.tasks = []
+      group.contexts = {}
       group.page = 0
       group.total = 0
     }
@@ -156,8 +194,149 @@ watch(
   },
   { immediate: true },
 )
+function contextDate(group: (typeof groups)[number], task: ProjectTask): string {
+  const key = group.contexts[task.id]?.occurrences[0]?.occurrence_key
+  return key && key !== 'single' ? key : group.contextDate
+}
+function reviewChanged(group: (typeof groups)[number], note: ProgressNote): void {
+  if (!note.review || note.project_id !== props.project.id || !note.review_context) return
+  const context = group.contexts[note.review.task_id]
+  const occurrence = context?.occurrences.find(
+    (value) => value.occurrence_key === note.review!.occurrence_key,
+  )
+  if (!occurrence) return
+  const previous = occurrence.reviews
+  const old = previous.data.find((value) => value.id === note.id)
+  const total = previous.meta.total + (old ? 0 : 1)
+  occurrence.reviews = {
+    data: [note, ...previous.data.filter((value) => value.id !== note.id)],
+    meta: { ...previous.meta, total, last_page: Math.max(1, Math.ceil(total / 20)) },
+    review_context: {
+      ...previous.review_context,
+      ...note.review_context,
+      active_count:
+        (previous.review_context.active_count ?? 0) +
+        (note.deleted_at ? 0 : 1) -
+        (old && !old.deleted_at ? 1 : 0),
+    },
+  }
+}
+function executed(group: (typeof groups)[number], result: CalendarExecutionResult): void {
+  const context = group.contexts[result.task.id]
+  const occurrence = context?.occurrences[0]
+  // Task status filters/counts are still refreshed by the existing list endpoint.
+  if (!context || !occurrence || context.task.status !== result.task.status) {
+    changed()
+    return
+  }
+  context.task = result.task
+  context.occurrences[0] = {
+    ...occurrence,
+    ...result.data,
+    reviews: {
+      ...occurrence.reviews,
+      review_context: { ...occurrence.reviews.review_context, ...result.review_context },
+    },
+  }
+  const index = group.tasks.findIndex((task) => task.id === result.task.id)
+  if (index >= 0) group.tasks[index] = result.task
+  emit('changed')
+}
+async function read(group: (typeof groups)[number], request: CalendarReadRequest): Promise<void> {
+  const project = props.project.id
+  const version = group.sequence
+  try {
+    let response: unknown
+    if (request.kind === 'history')
+      response = await projectTasksApi.history(
+        project,
+        request.taskId,
+        request.from!,
+        request.to!,
+        request.page,
+      )
+    else if (request.kind === 'next')
+      response = await projectTasksApi.occurrences(
+        project,
+        request.taskId,
+        request.from!,
+        request.to!,
+        request.page,
+      )
+    else if (request.kind === 'reviews') {
+      const result = await projectProgressApi.reviews(
+        project,
+        request.taskId,
+        request.key!,
+        request.page,
+      )
+      const occurrence = group.contexts[request.taskId]?.occurrences.find(
+        (value) => value.occurrence_key === request.key,
+      )
+      if (!disposed && version === group.sequence && project === props.project.id && occurrence) {
+        const existing = (request.page ?? 1) > 1 ? occurrence.reviews.data : []
+        occurrence.reviews = {
+          ...result,
+          data: [...new Map([...existing, ...result.data].map((note) => [note.id, note])).values()],
+          review_context: { ...occurrence.reviews.review_context, ...result.review_context },
+        }
+      }
+      response = result
+    } else {
+      await load(group)
+      response = group.contexts[request.taskId]
+    }
+    request.resolve(response)
+  } catch (failure) {
+    request.reject(failure)
+  }
+}
+async function selectDate(
+  group: (typeof groups)[number],
+  task: ProjectTask,
+  date: string,
+): Promise<void> {
+  const context = group.contexts[task.id]
+  if (!context || contextDate(group, task) === date || locked.value) return
+  const version = group.sequence
+  const project = props.project.id
+  busy(true)
+  try {
+    const [response, reviews] = await Promise.all([
+      projectTasksApi.occurrences(project, task.id, date, date),
+      projectProgressApi.reviews(project, task.id, date),
+    ])
+    if (disposed || version !== group.sequence || project !== props.project.id) return
+    const occurrence = response.data[0]
+    group.contexts[task.id] = {
+      ...context,
+      occurrence_eligible: task.execution_type !== 'recurring' || !!occurrence,
+      occurrences: [
+        {
+          ...(occurrence ?? {
+            id: null,
+            occurrence_key: date,
+            scheduled_date: date,
+            scheduled_time: task.scheduled_time,
+            status: 'pending' as const,
+            lock_version: 0,
+            is_recorded: false,
+            is_scheduled: false,
+          }),
+          reviews,
+        },
+      ],
+    }
+  } catch (failure) {
+    group.error = taskError(failure)
+    if (failure instanceof ApiError && [403, 404].includes(failure.status)) emit('accessChanged')
+  } finally {
+    busy(false)
+  }
+}
 onBeforeUnmount(() => {
   disposed = true
+  cancelLoads()
   clearTimeout(timer)
   emit('busy', false)
 })
@@ -268,6 +447,15 @@ onBeforeUnmount(() => {
             :task="task"
             :timezone="timezone"
             :trash="trash"
+            list-view
+            :selected-date="contextDate(group, task)"
+            :calendar-data="group.contexts[task.id]"
+            :calendar-occurrence="group.contexts[task.id]?.occurrences[0]"
+            :calendar-reviews="group.contexts[task.id]?.occurrences[0]?.reviews"
+            @review-changed="reviewChanged(group, $event)"
+            @occurrence-changed="executed(group, $event)"
+            @calendar-read="read(group, $event)"
+            @calendar-date="selectDate(group, task, $event)"
             :locked="locked"
             compact
             @busy="busy"

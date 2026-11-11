@@ -795,11 +795,16 @@ onBeforeUnmount(() => {
   background: transparent;
   cursor: pointer;
 }
-
-.ingredient-row__actions-button:hover,
 .ingredient-row__actions-button[aria-expanded='true'] {
   color: var(--color-text);
   background: var(--color-surface-soft);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ingredient-row__actions-button:hover {
+    color: var(--color-text);
+    background: var(--color-surface-soft);
+  }
 }
 
 .ingredient-row__menu {
@@ -828,8 +833,10 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.ingredient-row__menu button:hover {
-  background: var(--color-surface-soft);
+@media (hover: hover) and (pointer: fine) {
+  .ingredient-row__menu button:hover {
+    background: var(--color-surface-soft);
+  }
 }
 
 .admin-ingredients__toast {

@@ -304,12 +304,20 @@ watch(() => props.item.id, closeEditor)
 .shopping-item__edit::before {
   content: '⋯';
 }
-.shopping-item__edit:hover,
 .shopping-item__edit[aria-expanded='true'] {
   border-color: var(--color-border);
   color: var(--color-primary-strong);
   background: var(--color-primary-soft);
 }
+
+@media (hover: hover) and (pointer: fine) {
+  .shopping-item__edit:hover {
+    border-color: var(--color-border);
+    color: var(--color-primary-strong);
+    background: var(--color-primary-soft);
+  }
+}
+
 .shopping-item--checked strong {
   font-weight: 500;
   text-decoration: line-through;

@@ -290,7 +290,13 @@ class ShoppingListService
     {
         DB::transaction(function () use ($creator, $list, $member): void {
             $list = ShoppingList::query()->whereKey($list->id)->lockForUpdate()->firstOrFail();
-            Gate::forUser($creator)->authorize('manageSharing', $list);
+            if ((int) $creator->id === (int) $list->created_by) {
+                Gate::forUser($creator)->authorize('manageSharing', $list);
+            } else {
+                // A participant may only remove themselves; never trust the URL user ID.
+                abort_unless((int) $member->id === (int) $creator->id, 403);
+                Gate::forUser($creator)->authorize('leave', $list);
+            }
             $list->users()->detach($member->id);
         });
     }

@@ -4,10 +4,13 @@ import AppButton from '@/components/ui/AppButton.vue'
 import ProjectTaskReviews from '@/components/projects/ProjectTaskReviews.vue'
 import TaskOccurrenceStatusControl from '@/components/projects/TaskOccurrenceStatusControl.vue'
 import ProjectTaskForm from '@/components/projects/ProjectTaskForm.vue'
+import ProgressNoteConfirmDialog from '@/components/projects/ProgressNoteConfirmDialog.vue'
+import './projectDateInputs.css'
 import { ApiError } from '@/services/api'
 import { projectTasksApi } from '@/services/projectTasksApi'
+import { addSavedTaskToPhoneCalendar, phoneCalendarAvailable } from '@/services/taskPhoneCalendar'
 import { useAuthStore } from '@/stores/auth'
-import { useNotificationStore } from '@/stores/notifications'
+import { useNotificationStore, type ConfirmOptions } from '@/stores/notifications'
 import type { ProgressNote } from '@/types/projectProgress'
 import type { Project } from '@/types/projects'
 import type {
@@ -44,12 +47,20 @@ const props = withDefaults(
     locked?: boolean
     compact?: boolean
     widgetCompact?: boolean
+    listView?: boolean
     selectedDate?: string
     calendarOccurrence?: TaskOccurrence | null
     calendarData?: CalendarTaskData
     calendarReviews?: CalendarReviews
   }>(),
-  { timezone: 'UTC', trash: false, locked: false, compact: false, widgetCompact: false },
+  {
+    timezone: 'UTC',
+    trash: false,
+    locked: false,
+    compact: false,
+    widgetCompact: false,
+    listView: false,
+  },
 )
 const emit = defineEmits<{
   changed: []
@@ -64,9 +75,14 @@ const emit = defineEmits<{
 }>()
 const auth = useAuthStore()
 const notifications = useNotificationStore()
+const calendarAvailable = phoneCalendarAvailable()
+const exportingCalendar = ref(false)
 const task = ref(props.task)
-const expanded = ref(false)
-const widgetDetails = ref<HTMLDetailsElement | null>(null)
+const detailsDialog = ref<HTMLDialogElement | null>(null)
+const editDialog = ref<HTMLDialogElement | null>(null)
+const historyDialog = ref<HTMLDialogElement | null>(null)
+const confirmation = ref<InstanceType<typeof ProgressNoteConfirmDialog> | null>(null)
+const detailsOpen = ref(false)
 const editing = ref(false)
 const detailsId = useId()
 const actionMenu = ref<HTMLDetailsElement | null>(null)
@@ -80,13 +96,11 @@ const error = ref('')
 const executionError = ref('')
 const occurrence = ref<TaskOccurrence | null>(null)
 const eligible = ref(false)
-const next = ref<TaskOccurrence | null>(null)
-const nextLoaded = ref(false)
-const nextError = ref('')
 const date = ref(props.selectedDate ?? today(props.timezone))
 const currentRule = ref<TaskSchedule | null>(null)
 const latestRule = ref<TaskSchedule | null>(null)
 const ruleError = ref('')
+const rulesLoaded = ref(false)
 const history = ref<TaskCompletionEvent[]>([])
 const historyLoading = ref(false)
 const historyError = ref('')
@@ -103,7 +117,6 @@ const command = ref<{
 watch(command, (value) => emit('pendingCommand', Boolean(value)), { flush: 'sync' })
 let readSequence = 0
 let historySequence = 0
-let nextSequence = 0
 const key = computed(() => (task.value.execution_type === 'one_time' ? 'single' : date.value))
 const activeProject = computed(() => props.project.status === 'active')
 const executionWritable = computed(
@@ -118,6 +131,19 @@ const canManage = computed(
     activeProject.value &&
     (props.project.created_by === auth.user?.id || task.value.created_by === auth.user?.id),
 )
+const listRecurring = computed(() => props.listView && task.value.execution_type === 'recurring')
+const noListOccurrence = computed(
+  () =>
+    listRecurring.value &&
+    !loading.value &&
+    !executionError.value &&
+    occurrence.value !== null &&
+    !eligible.value &&
+    occurrence.value.is_scheduled !== true,
+)
+const noOccurrenceLabel = computed(() =>
+  date.value === today(props.timezone) ? 'Fără apariție astăzi' : 'Fără apariție în această zi',
+)
 const canExecute = computed(
   () =>
     activeProject.value &&
@@ -130,25 +156,55 @@ const canExecute = computed(
         task.value.status === 'completed' &&
         occurrence.value?.status === 'done')),
 )
-const disabled = computed(() => busy.value || props.locked)
-const occurrenceDate = computed(
-  () =>
-    occurrence.value?.scheduled_date ??
-    (task.value.execution_type === 'one_time' ? task.value.scheduled_date : date.value),
+const disabled = computed(() => busy.value || props.locked || exportingCalendar.value)
+const occurrenceDate = computed(() =>
+  task.value.execution_type === 'one_time'
+    ? task.value.scheduled_date
+    : (occurrence.value?.scheduled_date ?? date.value),
 )
-const overdue = computed(() => {
-  const projected = { ...task.value, scheduled_date: occurrenceDate.value }
-  const relevant = projected.due_date ?? projected.scheduled_date
-  return (
+const occurrenceTime = computed(() =>
+  task.value.execution_type === 'one_time'
+    ? task.value.scheduled_time
+    : occurrence.value
+      ? occurrence.value.scheduled_time
+      : task.value.scheduled_time,
+)
+const occurrenceDeadline = computed(() =>
+  task.value.execution_type !== 'one_time' && occurrence.value?.due_date !== undefined
+    ? occurrence.value.due_date
+    : task.value.due_date,
+)
+const occurrenceDeadlineTime = computed(() =>
+  task.value.execution_type !== 'one_time' && occurrence.value?.due_time !== undefined
+    ? occurrence.value.due_time
+    : task.value.due_time,
+)
+const overdue = computed(
+  () =>
     !props.trash &&
     !loading.value &&
     eligible.value &&
     shownStatus.value === 'pending' &&
-    relevant !== null &&
-    relevant < today(props.timezone) &&
-    taskIsOverdue(projected, props.timezone)
-  )
-})
+    taskIsOverdue(
+      {
+        ...task.value,
+        scheduled_date: occurrenceDate.value,
+        scheduled_time: occurrenceTime.value,
+        due_date: occurrenceDeadline.value,
+        due_time: occurrenceDeadlineTime.value,
+      },
+      props.timezone,
+    ),
+)
+const visualState = computed(() =>
+  shownStatus.value === 'done'
+    ? 'done'
+    : shownStatus.value === 'skipped'
+      ? 'skipped'
+      : overdue.value
+        ? 'overdue'
+        : 'pending',
+)
 const displayedRule = computed(() => {
   const rules = [latestRule.value, currentRule.value].filter(
     (rule): rule is TaskSchedule =>
@@ -227,16 +283,114 @@ async function keyboardMenu(): Promise<void> {
   await positionMenu()
   if (menuOpen.value) menuPanel.value?.querySelector('button')?.focus({ preventScroll: true })
 }
-function editFromMenu(): void {
+let previousOverflow: string | undefined
+function showDialog(dialog: HTMLDialogElement | null): void {
+  if (!dialog || dialog.open) return
+  if (previousOverflow === undefined) {
+    previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+  }
+  dialog.showModal()
+}
+function dialogClosed(): void {
+  detailsOpen.value = detailsDialog.value?.open ?? false
+  if (
+    ![detailsDialog.value, editDialog.value, historyDialog.value].some((dialog) => dialog?.open) &&
+    previousOverflow !== undefined
+  ) {
+    document.body.style.overflow = previousOverflow
+    previousOverflow = undefined
+  }
+}
+function openDetails(): void {
+  closeMenu()
+  showDialog(detailsDialog.value)
+  detailsOpen.value = detailsDialog.value?.open ?? false
+}
+function cardClick(event: MouseEvent): void {
+  const target = event.target
+  if (
+    event.defaultPrevented ||
+    !(target instanceof Element) ||
+    target.closest('button, a, input, select, textarea, summary, details, [role="button"]') ||
+    window.getSelection()?.toString()
+  )
+    return
+  openDetails()
+}
+async function editFromMenu(): Promise<void> {
+  if (!canManage.value || disabled.value || command.value) return
   closeMenu()
   actionMenu.value?.querySelector('summary')?.focus({ preventScroll: true })
   editing.value = true
-  if (widgetDetails.value) widgetDetails.value.open = true
+  await nextTick()
+  showDialog(editDialog.value)
 }
-function deleteFromMenu(): void {
+function closeEdit(): void {
+  if (busy.value) return
+  editDialog.value?.close()
+  editing.value = false
+}
+function editClosed(): void {
+  editing.value = false
+  dialogClosed()
+}
+const canExportCalendar = computed(
+  () =>
+    calendarAvailable &&
+    !props.trash &&
+    !loading.value &&
+    !executionError.value &&
+    Boolean(occurrenceDate.value) &&
+    (task.value.execution_type !== 'recurring' ||
+      (eligible.value &&
+        occurrence.value !== null &&
+        (occurrence.value.is_scheduled === true || occurrence.value.id !== null))),
+)
+async function calendarFromMenu(): Promise<void> {
+  if (!canExportCalendar.value || disabled.value || command.value) return
+  closeMenu()
+  exportingCalendar.value = true
+  try {
+    const result = await addSavedTaskToPhoneCalendar(
+      props.project.id,
+      task.value,
+      date.value,
+      occurrence.value ?? undefined,
+    )
+    if (result === 'saved')
+      notifications.success('Evenimentul a fost adăugat în calendarul telefonului.')
+    else if (result === 'cancelled')
+      notifications.info('Adăugarea în calendar a fost anulată sau nu a fost confirmată.')
+    else
+      notifications.info('Calendarul nu confirmă salvarea; verifică evenimentul în aplicația de calendar.')
+  } catch (failure) {
+    notifications.warning(
+      failure instanceof Error ? failure.message : 'Nu am putut deschide calendarul telefonului.',
+    )
+  } finally {
+    exportingCalendar.value = false
+    actionMenu.value?.querySelector('summary')?.focus({ preventScroll: true })
+  }
+}
+function historyFromMenu(): void {
   closeMenu()
   actionMenu.value?.querySelector('summary')?.focus({ preventScroll: true })
-  void manage('delete')
+  showDialog(historyDialog.value)
+  void loadHistory()
+}
+function archiveFromMenu(): void {
+  closeMenu()
+  void manage('archive')
+}
+function confirmTask(options: ConfirmOptions): Promise<boolean> {
+  return (
+    confirmation.value?.ask({
+      ...options,
+      confirmText: options.confirmText ?? 'Confirmă',
+      cancelText: options.cancelText ?? 'Anulează',
+    }) ?? Promise.resolve(false)
+  )
 }
 watch(menuOpen, (value) => {
   if (value) {
@@ -277,7 +431,8 @@ async function loadOccurrence(force = false): Promise<void> {
   if (!force && props.calendarOccurrence !== undefined && date.value === props.selectedDate) {
     occurrence.value = props.calendarOccurrence
     eligible.value =
-      task.value.execution_type !== 'recurring' || props.calendarOccurrence?.is_scheduled === true
+      props.calendarData?.occurrence_eligible ??
+      (task.value.execution_type !== 'recurring' || props.calendarOccurrence?.is_scheduled === true)
     loading.value = false
     return
   }
@@ -321,36 +476,9 @@ function calendarRead<T>(
     }),
   )
 }
-async function loadNext(): Promise<void> {
-  if (props.compact && !expanded.value) return
-  if (task.value.execution_type !== 'recurring' || props.trash) return
-  const request = ++nextSequence
-  nextLoaded.value = false
-  nextError.value = ''
-  next.value = null
-  try {
-    const from = today(props.timezone)
-    const to = shiftDate(from, 365)
-    let page = 1
-    do {
-      const response = props.calendarData
-        ? await calendarRead<TaskPage<TaskOccurrence>>({ kind: 'next', from, to, page })
-        : await projectTasksApi.occurrences(props.project.id, task.value.id, from, to, page)
-      if (request !== nextSequence) return
-      next.value = response.data.find((row) => row.is_scheduled && row.status === 'pending') ?? null
-      if (next.value || page >= response.meta.last_page) break
-      page++
-    } while (page <= 4)
-    nextLoaded.value = true
-  } catch (failure) {
-    if (request === nextSequence) {
-      nextError.value = taskError(failure)
-      accessFailure(failure)
-    }
-  }
-}
 async function loadRules(): Promise<void> {
   if (props.calendarData) {
+    rulesLoaded.value = true
     currentRule.value = props.calendarData.current_rule
     latestRule.value = props.calendarData.latest_rule
     return
@@ -362,6 +490,7 @@ async function loadRules(): Promise<void> {
       projectTasksApi.schedule(props.project.id, task.value.id),
       projectTasksApi.scheduleVersions(props.project.id, task.value.id),
     ])
+    rulesLoaded.value = true
     currentRule.value = current.data
     latestRule.value = latest.data[0] ?? null
   } catch (failure) {
@@ -427,11 +556,7 @@ async function refresh(force = false): Promise<void> {
   eligible.value = false
   try {
     task.value = (await projectTasksApi.get(props.project.id, task.value.id)).data
-    await Promise.all([
-      loadOccurrence(true),
-      loadNext(),
-      ...(expanded.value ? [loadHistory(), loadRules()] : []),
-    ])
+    await Promise.all([loadOccurrence(true), ...(historyDialog.value?.open ? [loadHistory()] : [])])
   } catch (failure) {
     error.value = taskError(failure)
     accessFailure(failure)
@@ -473,8 +598,7 @@ async function execute(action: ExecutionAction, retry = false): Promise<void> {
         task: response.task,
         review_context: response.review_context,
       })
-      nextLoaded.value = false
-      if (expanded.value) await Promise.all([loadHistory(), loadNext()])
+      if (historyDialog.value?.open) await loadHistory()
     } else {
       command.value = null
       await refresh()
@@ -511,7 +635,7 @@ async function manage(
       complete: 'Finalizezi definitiv taskul persistent?',
     }
     if (
-      !(await notifications.confirm({
+      !(await confirmTask({
         title: titles[action],
         message:
           action === 'complete'
@@ -542,15 +666,8 @@ async function manage(
     setBusy(false)
   }
 }
-function toggle(event: Event): void {
-  expanded.value = (event.target as HTMLDetailsElement).open
-  if (expanded.value) {
-    void loadNext()
-    void loadHistory()
-    void loadRules()
-  }
-}
 async function saved(): Promise<void> {
+  editDialog.value?.close()
   editing.value = false
   await refresh()
   emit('changed')
@@ -562,7 +679,6 @@ watch(
     task.value = value
     if (!props.trash) {
       void loadOccurrence()
-      if (!props.calendarData) void loadNext()
       void loadRules()
     }
   },
@@ -587,6 +703,10 @@ watch(date, () => {
   void loadOccurrence()
 })
 onBeforeUnmount(() => {
+  detailsDialog.value?.close()
+  editDialog.value?.close()
+  historyDialog.value?.close()
+  dialogClosed()
   closeMenu()
   document.removeEventListener('pointerdown', outsideMenu)
   document.removeEventListener('keydown', menuKey)
@@ -595,7 +715,6 @@ onBeforeUnmount(() => {
   window.visualViewport?.removeEventListener('resize', positionMenu)
   emit('pendingCommand', false)
   readSequence++
-  nextSequence++
   historySequence++
   if (busy.value) emit('busy', false)
 })
@@ -603,10 +722,11 @@ onBeforeUnmount(() => {
 
 <template>
   <article
-    class="task-card task-card--v2"
+    class="task-card task-card--v3"
+    @click="cardClick"
     :class="{
       'task-card--compact': compact,
-      'task-card--expanded': expanded,
+      [`task-card--${visualState}`]: true,
       'task-card--widget': widgetCompact,
     }"
   >
@@ -617,22 +737,43 @@ onBeforeUnmount(() => {
           type="button"
           :title="task.title"
           :aria-label="`Detalii: ${task.title}`"
-          :aria-expanded="expanded"
+          :aria-expanded="detailsOpen"
+          aria-haspopup="dialog"
           :aria-controls="detailsId"
-          @click="widgetDetails && (widgetDetails.open = !widgetDetails.open)"
+          @click.stop="openDetails"
         >
           {{ task.title }}
         </button>
         <span
           class="task-card__priority"
+          :class="`task-card__priority--${task.priority}`"
           :aria-label="`Prioritate: ${taskPriorities[task.priority]}`"
         >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path
+              v-if="task.priority === 'high' || task.priority === 'urgent'"
+              d="m7 11 5-5 5 5m-10 7 5-5 5 5"
+            />
+            <path v-else-if="task.priority === 'low'" d="m7 10 5 5 5-5" />
+            <path v-else d="M6 12h12" />
+          </svg>
           {{ taskPriorities[task.priority] }}
         </span>
         <details
-          v-if="canManage && !trash"
+          v-if="!trash"
           ref="actionMenu"
           class="task-card__menu"
+          @click.stop
           @toggle="menuOpen = ($event.target as HTMLDetailsElement).open"
         >
           <summary
@@ -651,8 +792,32 @@ onBeforeUnmount(() => {
           </summary>
         </details>
       </div>
-      <div class="task-card__timing">
-        <span class="task-card__date" :class="{ 'task-card__date--overdue': overdue }">
+      <slot v-if="widgetCompact" name="widget-meta" />
+    </div>
+    <div class="task-card__timing">
+      <span class="task-card__date" :class="{ 'task-card__date--overdue': overdue }">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          aria-hidden="true"
+        >
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M16 3v4M8 3v4M3 11h18" />
+        </svg>
+        <template v-if="listRecurring">Status la {{ displayDate(date, occurrenceTime) }}</template>
+        <template v-else>{{ displayDate(occurrenceDate, occurrenceTime) }}</template>
+        <span v-if="overdue">· Întârziat</span>
+      </span>
+      <template v-if="task.execution_type === 'recurring'">
+        <span aria-hidden="true">·</span>
+        <span
+          class="task-card__recurrence"
+          :title="displayedRule ? scheduleLabel(displayedRule) : recurrenceLabel"
+        >
           <svg
             width="14"
             height="14"
@@ -662,38 +827,13 @@ onBeforeUnmount(() => {
             stroke-width="1.6"
             aria-hidden="true"
           >
-            <rect x="3" y="5" width="18" height="16" rx="2" />
-            <path d="M16 3v4M8 3v4M3 11h18" />
+            <path d="m17 2 4 4-4 4M3 11V8a2 2 0 0 1 2-2h16M7 22l-4-4 4-4m14-1v3a2 2 0 0 1-2 2H3" />
           </svg>
-          {{ displayDate(occurrenceDate, occurrence?.scheduled_time ?? task.scheduled_time) }}
-          <span v-if="overdue">· Restant</span>
+          {{ recurrenceLabel }}
         </span>
-        <template v-if="task.execution_type === 'recurring'">
-          <span aria-hidden="true">·</span>
-          <span
-            class="task-card__recurrence"
-            :title="displayedRule ? scheduleLabel(displayedRule) : recurrenceLabel"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.6"
-              aria-hidden="true"
-            >
-              <path
-                d="m17 2 4 4-4 4M3 11V8a2 2 0 0 1 2-2h16M7 22l-4-4 4-4m14-1v3a2 2 0 0 1-2 2H3"
-              />
-            </svg>
-            {{ recurrenceLabel }}
-          </span>
-        </template>
-      </div>
-      <slot v-if="widgetCompact" name="widget-meta" />
+      </template>
     </div>
-    <div v-if="!trash" class="task-card__primary-actions">
+    <div v-if="!trash" class="task-card__primary-actions" @click.stop>
       <ProjectTaskReviews
         :project="project"
         :task="task"
@@ -709,7 +849,11 @@ onBeforeUnmount(() => {
         @changed="emit('changed')"
         @access-changed="emit('accessChanged')"
       />
+      <span v-if="noListOccurrence" class="task-card__no-occurrence">
+        {{ noOccurrenceLabel }}
+      </span>
       <TaskOccurrenceStatusControl
+        v-else
         :status="shownStatus"
         :label="`Status pentru ${task.title}`"
         :disabled="disabled || !canExecute || Boolean(command)"
@@ -718,19 +862,21 @@ onBeforeUnmount(() => {
       />
     </div>
     <p v-if="executionError" class="projects-error" role="alert">{{ executionError }}</p>
-    <p v-else-if="!trash && !loading && !eligible" class="projects-muted">
+    <p v-else-if="!trash && !loading && !eligible && !noListOccurrence" class="projects-muted">
       Fără execuție eligibilă
     </p>
     <Teleport to="body">
       <div
-        v-if="menuOpen && canManage && !trash"
+        v-if="menuOpen && !trash"
         ref="menuPanel"
         class="task-card__menu-items"
+        @click.stop
         :style="menuStyle"
         role="group"
         :aria-label="`Acțiuni pentru ${task.title}`"
       >
         <button
+          v-if="canManage"
           type="button"
           class="task-quick"
           :disabled="disabled || Boolean(command)"
@@ -739,12 +885,25 @@ onBeforeUnmount(() => {
           Editează taskul
         </button>
         <button
+          v-if="canExportCalendar"
+          type="button"
+          class="task-quick"
+          :disabled="disabled || Boolean(command)"
+          @click="calendarFromMenu"
+        >
+          Adaugă în calendar
+        </button>
+        <button type="button" class="task-quick" :disabled="disabled" @click="historyFromMenu">
+          Istoric execuții
+        </button>
+        <button
+          v-if="canManage"
           type="button"
           class="task-quick task-quick--danger"
-          :disabled="disabled || Boolean(command)"
-          @click="deleteFromMenu"
+          :disabled="disabled || Boolean(command) || task.status === 'archived'"
+          @click="archiveFromMenu"
         >
-          Șterge taskul
+          Arhivează
         </button>
       </div>
     </Teleport>
@@ -769,122 +928,105 @@ onBeforeUnmount(() => {
     >
       Reîncearcă {{ command.action }} · {{ command.key }}
     </button>
-    <details :id="detailsId" ref="widgetDetails" class="task-card__details" @toggle="toggle">
-      <summary v-show="false">Detalii și istoric</summary>
-      <div class="task-details">
-        <div class="task-meta">
-          <span>Programat: {{ displayDate(task.scheduled_date, task.scheduled_time) }}</span>
-          <span
-            v-if="task.due_date !== task.scheduled_date || task.due_time !== task.scheduled_time"
-            >Termen: {{ displayDate(task.due_date, task.due_time) }}</span
+    <button
+      v-if="trash && canManage"
+      class="task-quick"
+      type="button"
+      :disabled="disabled"
+      @click.stop="manage('restore')"
+    >
+      Restaurează
+    </button>
+    <Teleport to="body">
+      <dialog
+        :id="detailsId"
+        ref="detailsDialog"
+        class="task-card-dialog"
+        :aria-labelledby="`${detailsId}-title`"
+        @click.stop.self="detailsDialog?.close()"
+        @close="dialogClosed"
+      >
+        <header class="task-card-dialog__header">
+          <h3 :id="`${detailsId}-title`">{{ task.title }}</h3>
+          <button
+            type="button"
+            class="task-dialog-close"
+            autofocus
+            aria-label="Închide detaliile"
+            @click="detailsDialog?.close()"
           >
+            ×
+          </button>
+        </header>
+        <div class="task-card-dialog__body">
+          <p v-if="task.description" class="task-card-description">{{ task.description }}</p>
+          <dl class="task-card-facts">
+            <div>
+              <dt>Programat</dt>
+              <dd>{{ displayDate(occurrenceDate, occurrenceTime) }}</dd>
+            </div>
+            <div>
+              <dt>Termen-limită</dt>
+              <dd>{{ displayDate(occurrenceDeadline, occurrenceDeadlineTime) }}</dd>
+            </div>
+            <div>
+              <dt>Prioritate</dt>
+              <dd>{{ taskPriorities[task.priority] }}</dd>
+            </div>
+            <div>
+              <dt>Tip execuție</dt>
+              <dd>{{ taskTypes[task.execution_type] }}</dd>
+            </div>
+            <div v-if="task.execution_type === 'recurring'">
+              <dt>Recurență</dt>
+              <dd>{{ displayedRule ? scheduleLabel(displayedRule) : recurrenceLabel }}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>{{ noListOccurrence ? noOccurrenceLabel : taskStates[shownStatus] }}<span v-if="overdue"> · Întârziat</span></dd>
+            </div>
+          </dl>
         </div>
-        <p v-if="task.status !== 'active'" class="projects-muted">
-          {{ task.status === 'archived' ? 'Arhivat' : 'Finalizat' }}
-        </p>
-        <p v-if="task.execution_type === 'recurring' && !trash" class="projects-muted">
-          {{
-            nextError ||
-            (next
-              ? `Următoarea: ${displayDate(next.scheduled_date, next.scheduled_time)}`
-              : nextLoaded
-                ? 'Nicio execuție programată de făcut în următoarele 366 de zile.'
-                : 'Se caută următoarea execuție…')
-          }}
-        </p>
-        <p v-if="!trash" class="projects-muted">
-          {{ task.execution_type === 'one_time' ? 'Execuție unică' : displayDate(date) }} ·
-          {{
-            occurrence
-              ? taskStates[occurrence.status]
-              : eligible
-                ? 'De făcut'
-                : 'Fără execuție eligibilă'
-          }}
-          {{ occurrence?.is_recorded ? '· înregistrată' : eligible ? '· neînregistrată' : '' }}
-        </p>
-        <button
-          v-if="!trash && !activeProject"
-          class="progress-text-action"
-          type="button"
-          :disabled="disabled"
-          @click="emit('progress', task, props.selectedDate ?? date)"
-        >
-          Vezi progresul
-        </button>
-        <p v-if="task.description" class="projects-description">{{ task.description }}</p>
-        <p class="projects-muted">
-          {{ taskTypes[task.execution_type] }} ·
-          {{
-            task.show_in_daily_widget ? 'Vizibil în widgetul zilnic' : 'Ascuns din widgetul zilnic'
-          }}
-        </p>
-        <template v-if="!trash">
-          <label v-if="task.execution_type !== 'one_time'" class="task-date-picker"
-            >Data execuției<input
-              v-model="date"
-              type="date"
-              :disabled="disabled || Boolean(command)"
-              required
-          /></label>
+      </dialog>
+      <dialog
+        ref="editDialog"
+        class="task-card-dialog task-card-dialog--edit"
+        :aria-labelledby="`${detailsId}-edit`"
+        @click.stop.self="closeEdit"
+        @cancel.prevent="closeEdit"
+        @close="editClosed"
+      >
+        <header class="task-card-dialog__header">
+          <h3 :id="`${detailsId}-edit`">Editează taskul</h3>
           <button
-            v-if="task.execution_type !== 'one_time' && date !== today(timezone)"
-            class="task-quick"
             type="button"
-            :disabled="disabled || Boolean(command)"
-            @click="date = today(timezone)"
+            class="task-dialog-close"
+            autofocus
+            :disabled="busy"
+            aria-label="Închide editarea"
+            @click="closeEdit"
           >
-            Astăzi
+            ×
           </button>
-          <button
-            v-if="executionError || nextError"
-            class="projects-text-button"
-            type="button"
-            :disabled="disabled"
-            @click="refresh(true)"
-          >
-            Reîncarcă starea
-          </button>
-          <div v-if="task.execution_type === 'recurring'" class="task-rule">
-            <p v-if="ruleError" role="alert">{{ ruleError }}</p>
-            <p v-else>
-              {{
-                currentRule
-                  ? `Regula curentă: ${scheduleLabel(currentRule)}`
-                  : 'Nu există regulă curentă.'
-              }}
-            </p>
-            <p v-if="currentRule">
-              {{ displayDate(currentRule.start_date) }} → {{ displayDate(currentRule.end_date) }}
-            </p>
-            <p v-if="latestRule && latestRule.id !== currentRule?.id">
-              Din {{ displayDate(latestRule.effective_from) }}: {{ scheduleLabel(latestRule) }}
-            </p>
-          </div>
-        </template>
-        <div v-if="canManage" class="task-buttons">
-          <template v-if="trash"
-            ><button
-              class="task-quick"
-              type="button"
-              :disabled="disabled"
-              @click="manage('restore')"
-            >
-              Restaurează
-            </button></template
-          >
-          <template v-else>
+        </header>
+        <div class="task-card-dialog__body">
+          <p v-if="error" class="projects-error" role="alert">{{ error }}</p>
+          <ProjectTaskForm
+            v-if="editing && canManage && !trash"
+            :project="project"
+            :task="task"
+            :occurrence-date="date"
+            :initial-schedule="rulesLoaded ? latestRule : undefined"
+            :confirm="confirmTask"
+            @busy="setBusy"
+            @cancel="closeEdit"
+            @changed="emit('changed')"
+            @saved="saved"
+            @access-changed="emit('accessChanged')"
+          />
+          <div v-if="canManage" class="task-buttons task-card-dialog__admin">
             <button
-              v-if="task.status !== 'archived'"
-              class="task-quick"
-              type="button"
-              :disabled="disabled || Boolean(command)"
-              @click="manage('archive')"
-            >
-              Arhivează
-            </button>
-            <button
-              v-if="task.status !== 'active'"
+              v-if="task.status === 'archived'"
               class="task-quick"
               type="button"
               :disabled="disabled || Boolean(command)"
@@ -901,95 +1043,120 @@ onBeforeUnmount(() => {
             >
               Finalizează definitiv
             </button>
-          </template>
+          </div>
         </div>
-        <ProjectTaskForm
-          v-if="editing && canManage && !trash"
-          :project="project"
-          :task="task"
-          :occurrence-date="date"
-          @busy="setBusy"
-          @cancel="editing = false"
-          @changed="emit('changed')"
-          @saved="saved"
-          @access-changed="emit('accessChanged')"
-        />
-        <section v-if="!trash" class="task-history">
-          <h4>Istoric execuții</h4>
-          <div class="task-form__columns">
-            <label
-              >De la<input v-model="historyStart" type="date" :disabled="historyLoading" /></label
-            ><label
-              >Până la<input v-model="historyEnd" type="date" :disabled="historyLoading"
-            /></label>
-          </div>
-          <div class="task-buttons">
-            <button
-              class="task-quick"
-              type="button"
-              :disabled="historyLoading"
-              @click="historyPeriod(-30)"
-            >
-              ‹ 30 zile</button
-            ><button
-              class="task-quick"
-              type="button"
-              :disabled="historyLoading"
-              @click="loadHistory()"
-            >
-              Aplică intervalul</button
-            ><button
-              class="task-quick"
-              type="button"
-              :disabled="historyLoading || historyEnd >= today(timezone)"
-              @click="historyPeriod(30)"
-            >
-              30 zile ›
-            </button>
-          </div>
-          <p class="projects-muted">Maximum 366 de zile per interval. Ordine cronologică.</p>
-          <p v-if="historyLoading" role="status">Se încarcă istoricul…</p>
-          <p v-if="historyError" class="task-overdue" role="alert">{{ historyError }}</p>
-          <p v-if="!historyLoading && !historyError && !history.length" class="projects-muted">
-            Nicio acțiune în acest interval.
-          </p>
-          <ul>
-            <li v-for="event in history" :key="event.id">
-              <strong
-                >{{ taskStates[event.previous_status] }} →
-                {{ taskStates[event.new_status] }}</strong
-              >
-              · {{ displayDate(event.performed_on) }} ·
-              {{
-                event.actor_id === auth.user?.id
-                  ? 'Tu'
-                  : (event.actor?.username ?? `Utilizator #${event.actor_id}`)
-              }}
-              · {{ new Date(event.recorded_at).toLocaleString('ro-RO') }}
-            </li>
-          </ul>
-          <AppButton
-            v-if="historyPage < historyLastPage"
-            variant="secondary"
-            :loading="historyLoading"
-            @click="loadHistory(true)"
-            >Mai mult istoric</AppButton
+      </dialog>
+      <dialog
+        ref="historyDialog"
+        class="task-card-dialog"
+        :aria-labelledby="`${detailsId}-history`"
+        @click.stop.self="historyDialog?.close()"
+        @close="dialogClosed"
+      >
+        <header class="task-card-dialog__header">
+          <h3 :id="`${detailsId}-history`">Istoric execuții · {{ task.title }}</h3>
+          <button
+            type="button"
+            class="task-dialog-close"
+            autofocus
+            aria-label="Închide istoricul"
+            @click="historyDialog?.close()"
           >
-        </section>
-      </div>
-    </details>
+            ×
+          </button>
+        </header>
+        <div class="task-card-dialog__body">
+          <label v-if="task.execution_type !== 'one_time'" class="task-date-picker"
+            >Data apariției afișate
+            <input v-model="date" type="date" :disabled="disabled || Boolean(command)" required />
+          </label>
+          <section class="task-history">
+            <div class="task-form__columns project-date-columns">
+              <label
+                >De la<input v-model="historyStart" type="date" :disabled="historyLoading" /></label
+              ><label
+                >Până la<input v-model="historyEnd" type="date" :disabled="historyLoading"
+              /></label>
+            </div>
+            <div class="task-buttons">
+              <button
+                class="task-quick"
+                type="button"
+                :disabled="historyLoading"
+                @click="historyPeriod(-30)"
+              >
+                ‹ 30 zile</button
+              ><button
+                class="task-quick"
+                type="button"
+                :disabled="historyLoading"
+                @click="loadHistory()"
+              >
+                Aplică intervalul</button
+              ><button
+                class="task-quick"
+                type="button"
+                :disabled="historyLoading || historyEnd >= today(timezone)"
+                @click="historyPeriod(30)"
+              >
+                30 zile ›
+              </button>
+            </div>
+            <p class="projects-muted">Maximum 366 de zile per interval. Ordine cronologică.</p>
+            <p v-if="historyLoading" role="status">Se încarcă istoricul…</p>
+            <p v-if="historyError" class="task-overdue" role="alert">{{ historyError }}</p>
+            <p v-if="!historyLoading && !historyError && !history.length" class="projects-muted">
+              Nicio acțiune în acest interval.
+            </p>
+            <ul>
+              <li v-for="event in history" :key="event.id">
+                <strong
+                  >{{ taskStates[event.previous_status] }} →
+                  {{ taskStates[event.new_status] }}</strong
+                >
+                · {{ displayDate(event.performed_on) }} ·
+                {{
+                  event.actor_id === auth.user?.id
+                    ? 'Tu'
+                    : (event.actor?.username ?? `Utilizator #${event.actor_id}`)
+                }}
+                · {{ new Date(event.recorded_at).toLocaleString('ro-RO') }}
+              </li>
+            </ul>
+            <AppButton
+              v-if="historyPage < historyLastPage"
+              variant="secondary"
+              :loading="historyLoading"
+              @click="loadHistory(true)"
+              >Mai mult istoric</AppButton
+            >
+          </section>
+        </div>
+      </dialog>
+      <ProgressNoteConfirmDialog ref="confirmation" class="task-card-confirm" />
+    </Teleport>
   </article>
 </template>
 
 <style scoped>
-.task-card.task-card--v2 {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
+.task-card.task-card--v3 {
+  --task-accent: var(--color-yellow);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 8px;
+  border-inline-start: 4px solid var(--task-accent);
+  background: var(--color-surface);
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--task-accent) 5%, transparent),
+    transparent 40%
+  );
   min-height: 0;
-  padding: 12px;
+  padding: 8px 10px;
   opacity: 1;
 }
 .task-card__information {
+  grid-column: 1 / -1;
   display: grid;
   gap: 4px;
   min-width: 0;
@@ -1021,6 +1188,9 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .task-card__priority {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   flex: none;
   margin-top: 8px;
   padding: 3px 6px;
@@ -1028,7 +1198,24 @@ onBeforeUnmount(() => {
   background: var(--color-surface-soft);
   color: var(--color-text-muted);
   font-size: 0.68rem;
+  line-height: 1.3;
   white-space: nowrap;
+}
+.task-card__priority svg {
+  flex: none;
+}
+.task-card__priority--high,
+.task-card__priority--urgent {
+  background: var(--color-error-soft);
+  color: color-mix(in srgb, var(--color-error) 80%, var(--color-text));
+}
+.task-card__priority--medium {
+  background: var(--color-yellow-soft);
+  color: #835800;
+}
+.task-card__priority--low {
+  background: color-mix(in srgb, var(--color-secondary) 8%, var(--color-surface));
+  color: var(--color-secondary);
 }
 .task-card__menu {
   flex: none;
@@ -1057,7 +1244,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 4px 6px;
   min-width: 0;
-  padding-bottom: 8px;
+  padding-bottom: 0;
   color: var(--color-text-muted);
   font-size: 0.73rem;
 }
@@ -1079,25 +1266,45 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
-  border-top: 1px solid var(--color-border);
-  padding-top: 6px;
+  min-height: 44px;
+  max-width: 100%;
+  padding-top: 0;
+  justify-self: end;
+}
+.task-card__no-occurrence {
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 .task-card__primary-actions :deep(.task-status-control) {
   flex: 0 1 auto;
+  width: max-content;
+  min-height: 38px;
+  height: 38px;
+  padding-inline: 6px;
+  gap: 4px;
 }
-.task-card.task-card--v2 > .task-card__details {
-  margin: 0;
-  padding: 0;
-  min-width: 0;
+.task-card__primary-actions :deep(.task-status-control__icon) {
+  width: 14px;
+  height: 14px;
 }
-.task-card.task-card--v2 > .task-card__details[open] {
-  border-top: 1px solid var(--color-border);
-  margin-top: 8px;
-  padding-top: 8px;
+.task-card__primary-actions :deep(.task-status-control > svg:not(.task-status-control__icon)) {
+  width: 10px;
+  height: 10px;
+}
+.task-card__primary-actions :deep(.task-status-control select) {
+  top: 50%;
+  bottom: auto;
+  height: 44px;
+  min-height: 44px;
+  transform: translateY(-50%);
 }
 .task-card__menu-items {
+  max-width: calc(100vw - 24px);
   position: fixed;
   z-index: 1000;
   display: grid;
@@ -1119,5 +1326,150 @@ onBeforeUnmount(() => {
 .task-card__menu > summary:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: -2px;
+}
+.task-card--v3.task-card--done {
+  --task-accent: var(--color-success);
+}
+.task-card--v3.task-card--overdue {
+  --task-accent: var(--color-error);
+}
+.task-card--v3.task-card--skipped {
+  --task-accent: var(--color-text-muted);
+}
+.task-card--v3 > :is(.projects-error, .projects-muted, .task-quick) {
+  grid-column: 1 / -1;
+}
+.task-card-dialog,
+.task-card-confirm {
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  width: min(560px, calc(100% - 24px));
+  max-width: calc(100% - 24px);
+  max-height: calc(
+    100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
+  );
+  margin: auto;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: left;
+  box-shadow: var(--shadow-md);
+}
+.task-card-dialog::backdrop,
+.task-card-confirm::backdrop {
+  background: var(--color-overlay);
+}
+.task-card-dialog__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.task-card-dialog__header h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+.task-dialog-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 1.65rem;
+  cursor: pointer;
+}
+.task-dialog-close:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.task-card-dialog__body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+}
+.task-card-dialog--edit :deep(.task-form) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.task-card-dialog--edit :deep(.task-form > h3) {
+  display: none;
+}
+.task-card-description {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.task-card-facts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.task-card-facts > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 8px;
+}
+.task-card-facts dt {
+  color: var(--color-text-muted);
+  font-size: 0.83rem;
+}
+.task-card-facts dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.task-history {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.task-history ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-inline-start: 18px;
+  overflow-wrap: anywhere;
+}
+.task-card-confirm {
+  padding: 16px;
+}
+.task-card-confirm :deep(h3) {
+  margin: 0;
+  font-size: 1rem;
+}
+.task-card-confirm :deep(p) {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.task-card-confirm :deep(.note-editor-confirm__actions) {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 360px) {
+  .task-card.task-card--v3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .task-card__primary-actions {
+    justify-self: stretch;
+  }
 }
 </style>

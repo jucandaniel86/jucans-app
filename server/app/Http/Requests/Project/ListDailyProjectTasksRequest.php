@@ -15,7 +15,7 @@ class ListDailyProjectTasksRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'section' => ['sometimes', Rule::in(['active', 'completed'])],
+            'section' => ['sometimes', Rule::in(['active', 'completed', 'overdue'])],
             'page' => ['sometimes', 'integer', 'min:1', 'max:100000'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:50'],
         ];

@@ -373,6 +373,10 @@ function changeType(event: Event): void {
   void switchType(next)
 }
 async function reloadFields(): Promise<void> {
+  if (initial?.note_type_id) {
+    if (!frozen.value && !fieldsLoading.value) await configuration.loadTypes()
+    return
+  }
   if (
     (initial && !assigningType.value) ||
     frozen.value ||
@@ -393,7 +397,7 @@ async function reloadFields(): Promise<void> {
   if (!disposed && !frozen.value) await configuration.selectType(typeId.value)
 }
 onMounted(() => {
-  if (!initial) void initializeConfiguration()
+  if (!initial || initial.note_type_id) void initializeConfiguration()
 })
 onBeforeUnmount(() => {
   disposed = true
@@ -684,7 +688,7 @@ defineExpose({ save, dirty, busy, saveLabel, saveDisabled, closeMessage })
       <div v-if="fieldsError" role="alert" class="note-editor-field-error">
         <p>{{ fieldsError }}</p>
         <button
-          v-if="!initial || assigningType"
+          v-if="!initial || assigningType || initial.note_type_id"
           type="button"
           class="note-editor-text-action"
           :disabled="uncertainAssignment"

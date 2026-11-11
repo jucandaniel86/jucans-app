@@ -20,6 +20,8 @@ class ListProjectTasksRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'include_context' => ['sometimes', 'boolean'],
+            'occurrence_date' => ['sometimes', 'date_format:Y-m-d'],
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
             'execution_type' => ['sometimes', 'required', new Enum(ProjectTaskExecutionType::class)],
             'priority' => ['sometimes', 'required', new Enum(ProjectTaskPriority::class)],

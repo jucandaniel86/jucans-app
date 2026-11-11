@@ -37,6 +37,8 @@ export interface TaskPage<T> {
   meta: PaginationMeta
 }
 export interface TaskOccurrence {
+  due_date?: string | null
+  due_time?: string | null
   id: number | null
   occurrence_key: string
   scheduled_date: string | null
@@ -72,6 +74,8 @@ export interface TaskCompletionEvent {
   recorded_at: string
 }
 export interface TaskFilters {
+  include_context?: boolean
+  occurrence_date?: string
   execution_type?: ProjectExecutionType
   status?: ProjectStatus
   priority?: TaskPriority
@@ -95,6 +99,7 @@ export interface CalendarOccurrence extends TaskOccurrence {
   reviews: CalendarReviews
 }
 export interface CalendarTaskData {
+  occurrence_eligible?: boolean
   task: ProjectTask
   has_schedule: boolean
   current_rule: TaskSchedule | null
