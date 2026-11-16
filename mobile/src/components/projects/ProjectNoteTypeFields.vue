@@ -319,7 +319,7 @@ onBeforeUnmount(() => {
   sequence++
   librarySequence++
 })
-defineExpose({ blocking, unsettled })
+defineExpose({ blocking, unsettled, rows })
 </script>
 <template>
   <section class="note-type-fields" :aria-labelledby="`${id}-heading`" :aria-busy="loading || busy">

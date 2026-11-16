@@ -177,6 +177,7 @@ class ProjectNoteConfigurationService
             'description' => ['nullable', 'string', 'max:10000'],
             'template' => ['nullable', 'string', 'max:100000'],
         ])->validate();
+        $this->configureShopping($project, $type, $input);
         $type->fill($data);
         if (! $type->exists) {
             $type->project_id = $project->id;
@@ -187,6 +188,55 @@ class ProjectNoteConfigurationService
         $type->save();
 
         return $type->refresh();
+    }
+
+    public function shoppingType(Project $project): ProjectNoteType
+    {
+        $type = $project->noteTypes()->whereNotNull('is_shopping')->whereNull('archived_at')->first();
+        abort_unless($type, 422, 'Configure an active Shopping Note Type for this project first.');
+        $this->configureShopping($project, $type, []);
+        return $type;
+    }
+
+    private function configureShopping(Project $project, ProjectNoteType $type, array $input): void
+    {
+        $enabled = array_key_exists('is_shopping', $input) ? (bool) $input['is_shopping'] : (bool) $type->is_shopping;
+        $keys = ['shopping_amount_field_id', 'shopping_provider_field_id', 'shopping_provider_option_id'];
+        $mapping = [];
+        foreach ($keys as $key) {
+            $mapping[$key] = array_key_exists($key, $input) ? $input[$key] : $type->{$key};
+        }
+        if (! $enabled) {
+            if (collect($keys)->contains(fn ($key) => ! empty($input[$key]))) {
+                $this->invalid('is_shopping', 'Enable Shopping before assigning its fields.');
+            }
+            if (array_key_exists('is_shopping', $input)) {
+                $type->forceFill(['is_shopping' => null, ...array_fill_keys($keys, null)]);
+            } else {
+                foreach ($keys as $key) {
+                    if (array_key_exists($key, $input)) $type->{$key} = null;
+                }
+            }
+            return;
+        }
+        if ($type->archived_at !== null) {
+            $this->invalid('is_shopping', 'An archived Note Type cannot be used for Shopping.');
+        }
+        if ($project->noteTypes()->whereNotNull('is_shopping')->when($type->exists, fn ($q) => $q->whereKeyNot($type->id))->exists()) {
+            $this->invalid('is_shopping', 'This project already has a Shopping Note Type. Disable it first.');
+        }
+        foreach (['shopping_amount_field_id' => 'number', 'shopping_provider_field_id' => 'select'] as $key => $kind) {
+            $field = $project->customFields()->find($mapping[$key]);
+            if (! $field || $field->type !== $kind || $field->archived_at !== null
+                || ! $type->exists || ! $type->fields()->where('field_id', $field->id)->exists()) {
+                $this->invalid($key, "Choose an active attached {$kind} field from this project.");
+            }
+        }
+        $provider = $project->customFields()->findOrFail($mapping['shopping_provider_field_id']);
+        if (! $provider->options()->whereKey($mapping['shopping_provider_option_id'])->whereNull('archived_at')->exists()) {
+            $this->invalid('shopping_provider_option_id', 'Choose an active option from the selected provider field.');
+        }
+        $type->forceFill(['is_shopping' => '1', ...$mapping]);
     }
 
     public function setDefault(Project $project, ProjectNoteType $type): ProjectNoteType
@@ -206,6 +256,8 @@ class ProjectNoteConfigurationService
             abort_if($type->is_default, 409, 'Select another active default before archiving.');
             abort_if($project->noteTypes()->whereNull('archived_at')->count() <= 1, 409, 'Keep at least one active Note Type.');
         }
+        // Archiving releases the unique Shopping slot; restore never enables it implicitly.
+        if ($archive) $type->is_shopping = null;
         $type->forceFill(['archived_at' => $archive ? ($type->archived_at ?? now('UTC')) : null])->save();
 
         return $type;

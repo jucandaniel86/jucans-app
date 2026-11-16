@@ -7,6 +7,8 @@ let rememberedTab: IndexTab = 'active'
 import { computed, nextTick, onMounted, ref, useId, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
+import ShoppingExpenseForm from '@/components/shopping/ShoppingExpenseForm.vue'
+import { ApiError } from '@/services/api'
 import ShoppingListVisibilityBadge from '@/components/shopping/ShoppingListVisibilityBadge.vue'
 import { useActiveShoppingListStore } from '@/stores/activeShoppingList'
 import { shoppingApi } from '@/services/shoppingApi'
@@ -27,6 +29,56 @@ const router = useRouter()
 const selecting = ref<number | null>(null)
 const tab = ref<IndexTab>(rememberedTab)
 const panelId = useId()
+const expenseDialog = ref<HTMLDialogElement | null>(null)
+const expenseForm = ref<InstanceType<typeof ShoppingExpenseForm> | null>(null)
+const expenseList = ref<ShoppingListSummary | null>(null)
+const expenseSaving = ref(false)
+async function openExpense(list: ShoppingListSummary): Promise<void> {
+  if (
+    expenseSaving.value ||
+    list.status !== 'closed' ||
+    list.has_expense ||
+    !list.can_register_expense
+  )
+    return
+  expenseList.value = list
+  await nextTick()
+  expenseDialog.value?.showModal()
+}
+function closeExpense(): void {
+  if (expenseSaving.value) return
+  expenseDialog.value?.close()
+  expenseList.value = null
+}
+async function registerExpense(): Promise<void> {
+  if (expenseSaving.value || !expenseList.value) return
+  const input = expenseForm.value?.input()
+  if (!input) return
+  const target = expenseList.value
+  expenseSaving.value = true
+  try {
+    const result = await shoppingApi.registerExpense(target.id, { ...input, close_list: false })
+    if (
+      result.data?.shopping_list_id !== target.id ||
+      result.data.project_id !== input.project_id ||
+      result.data.list_status !== 'closed' ||
+      !result.data.note_id
+    )
+      throw new ApiError('Înregistrarea costului nu a putut fi confirmată.', 0)
+    // Update only this user's row; no list reload, reopening or current-list selection.
+    target.has_expense = true
+    target.can_register_expense = false
+    if (result.data.note_deleted)
+      notifications.warning('Costul există, dar nota este ștearsă. Restaurează nota din proiect.')
+    else notifications.success('Costul a fost înregistrat.')
+    expenseDialog.value?.close()
+    expenseList.value = null
+  } catch (failure) {
+    expenseForm.value?.showError(failure)
+  } finally {
+    expenseSaving.value = false
+  }
+}
 const history = computed(() => lists.value.filter((list) => list.status === 'closed'))
 const historyCount = computed(() =>
   pagination.value?.total !== undefined
@@ -167,6 +219,18 @@ onMounted(() => load())
           >
             {{ selecting === list.id ? 'Se selectează…' : 'Folosește lista' }}
           </button>
+          <span v-else-if="list.has_expense" class="shopping-lists__expense-recorded"
+            >✓ Cost înregistrat</span
+          >
+          <button
+            v-else-if="list.can_register_expense"
+            type="button"
+            class="shopping-lists__select"
+            :disabled="expenseSaving"
+            @click="openExpense(list)"
+          >
+            Adaugă cost
+          </button>
           <span v-else class="shopping-lists__chevron" aria-hidden="true">›</span>
         </div>
       </div>
@@ -186,6 +250,26 @@ onMounted(() => load())
         >Încearcă din nou</AppButton
       >
     </div>
+    <dialog
+      ref="expenseDialog"
+      class="shopping-lists__expense-dialog"
+      aria-labelledby="expense-title"
+      @cancel.prevent="closeExpense"
+    >
+      <form v-if="expenseList" novalidate @submit.prevent="registerExpense">
+        <h2 id="expense-title">Adaugă cost</h2>
+        <p>{{ shoppingListName(expenseList) }}</p>
+        <ShoppingExpenseForm ref="expenseForm" :key="expenseList.id" :disabled="expenseSaving" />
+        <div class="shopping-lists__expense-actions">
+          <AppButton variant="secondary" :disabled="expenseSaving" @click="closeExpense"
+            >Anulează</AppButton
+          >
+          <AppButton type="submit" :loading="expenseSaving" :disabled="expenseForm?.loading"
+            >Adaugă cost</AppButton
+          >
+        </div>
+      </form>
+    </dialog>
   </section>
 </template>
 
@@ -196,6 +280,37 @@ onMounted(() => load())
   gap: var(--space-3);
   min-height: 100%;
   min-width: 0;
+}
+.shopping-lists__expense-recorded {
+  max-width: 110px;
+  color: var(--color-primary-strong);
+  font-size: 0.8rem;
+}
+.shopping-lists__expense-dialog {
+  width: calc(100% - 2 * var(--space-4));
+  max-width: 400px;
+  max-height: calc(100dvh - 2 * var(--space-4));
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+.shopping-lists__expense-dialog::backdrop {
+  background: var(--color-overlay);
+}
+.shopping-lists__expense-dialog h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+.shopping-lists__expense-dialog p {
+  font-size: 0.9rem;
+}
+.shopping-lists__expense-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
 }
 .shopping-lists__tabs {
   display: grid;

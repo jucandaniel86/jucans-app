@@ -37,6 +37,10 @@ export interface ProjectNoteType {
   description: string | null
   template: string | null
   is_default: boolean
+  is_shopping?: boolean
+  shopping_amount_field_id?: number | null
+  shopping_provider_field_id?: number | null
+  shopping_provider_option_id?: number | null
   archived_at: string | null
   created_at: string | null
   updated_at: string | null
@@ -78,6 +82,10 @@ export interface CreateProjectCustomFieldOptionPayload {
 export type UpdateProjectCustomFieldOptionPayload = Partial<CreateProjectCustomFieldOptionPayload>
 
 export interface CreateProjectNoteTypePayload {
+  is_shopping?: boolean
+  shopping_amount_field_id?: number | null
+  shopping_provider_field_id?: number | null
+  shopping_provider_option_id?: number | null
   name: string
   description?: string | null
   template?: string | null

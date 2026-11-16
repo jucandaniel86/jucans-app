@@ -31,12 +31,17 @@ onMounted(async () => {
     new Promise((resolve) => window.setTimeout(resolve, MINIMUM_LOADING_TIME)),
   ])
 
-  await enforceCurrentRoute()
+  if (!authStore.restorationError) await enforceCurrentRoute()
   isInitialized.value = true
 })
 
+async function retrySession(): Promise<void> {
+  await authStore.restoreSession()
+  if (!authStore.restorationError) await enforceCurrentRoute()
+}
+
 watch(isAuthenticated, async () => {
-  if (isInitialized.value) {
+  if (isInitialized.value && !authStore.isRestoring && !authStore.restorationError) {
     await enforceCurrentRoute()
   }
 })
@@ -45,7 +50,13 @@ watch(isAuthenticated, async () => {
 <template>
   <RouterView v-slot="{ Component }">
     <Transition name="app-reveal">
-      <AppLoading v-if="!isInitialized" key="loading" />
+      <AppLoading
+        v-if="!isInitialized || authStore.isRestoring || authStore.restorationError"
+        key="loading"
+        :error="authStore.restorationError"
+        :retrying="authStore.isRestoring"
+        @retry="retrySession"
+      />
       <component :is="Component" v-else key="application" />
     </Transition>
   </RouterView>

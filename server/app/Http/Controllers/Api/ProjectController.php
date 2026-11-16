@@ -37,6 +37,10 @@ class ProjectController extends Controller
         if (isset($validated['category_id'])) {
             $query->where('projects.category_id', $validated['category_id']);
         }
+        if ($request->boolean('shopping_only')) {
+            $query->where('projects.status', 'active')
+                ->whereHas('noteTypes', fn ($types) => $types->shoppingConfigured());
+        }
 
         return ProjectResource::collection($query
             ->orderBy('project_categories.sort_order')->orderBy('project_categories.id')

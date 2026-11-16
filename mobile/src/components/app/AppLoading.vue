@@ -1,3 +1,10 @@
+<script setup lang="ts">
+import AppButton from '@/components/ui/AppButton.vue'
+
+defineProps<{ error?: string; retrying?: boolean }>()
+defineEmits<{ retry: [] }>()
+</script>
+
 <template>
   <main class="loading-screen" aria-label="Jucans se încarcă" aria-live="polite">
     <div class="loading-screen__content">
@@ -8,7 +15,13 @@
         width="527"
         height="521"
       />
-      <div class="loading-screen__status">
+      <template v-if="error">
+        <p class="loading-screen__error" role="alert">{{ error }}</p>
+        <AppButton :loading="retrying" :disabled="retrying" @click="$emit('retry')">
+          Reîncearcă conectarea
+        </AppButton>
+      </template>
+      <div v-else class="loading-screen__status">
         <span class="loading-screen__dot" />
         <span class="loading-screen__dot" />
         <span class="loading-screen__dot" />
@@ -43,6 +56,13 @@
   filter: drop-shadow(0 14px 15px rgb(21 36 61 / 12%));
   transform-origin: 50% 92%;
   animation: logo-soft-bounce 1800ms cubic-bezier(0.36, 0.02, 0.2, 1) infinite;
+}
+
+.loading-screen__error {
+  margin: 0;
+  color: var(--color-text-muted);
+  text-align: center;
+  font-size: 0.9rem;
 }
 
 .loading-screen__status {

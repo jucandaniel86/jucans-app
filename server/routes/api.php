@@ -148,6 +148,7 @@ use App\Http\Controllers\Api\ProjectNoteTypeFieldController;
     Route::post('/shopping-lists/active/close', [ShoppingListController::class, 'close']);
     Route::get('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'show']);
     Route::post('/shopping-lists', [ShoppingListController::class, 'store']);
+    Route::post('/shopping-lists/{shoppingList}/expense', \App\Http\Controllers\Api\ShoppingListExpenseController::class)->whereNumber('shoppingList');
     Route::post('/shopping-lists/{shoppingList}/close', [ShoppingListController::class, 'closeList'])->whereNumber('shoppingList');
     Route::get('/shopping-lists/{shoppingList}/export', [ShoppingListController::class, 'export'])->whereNumber('shoppingList');
     Route::post('/shopping-lists/{shoppingList}/recipes/{recipe}', [ShoppingListController::class, 'addRecipeToList'])->whereNumber('shoppingList');

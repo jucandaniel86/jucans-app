@@ -12,6 +12,7 @@ vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 1 } }) }))
 vi.mock('@/services/projectNoteConfigurationApi', () => ({
   projectNoteConfigurationApi: {
     createNoteType: vi.fn(),
+    options: vi.fn(),
     noteTypeFields: vi.fn(),
     updateNoteTypeField: vi.fn(),
     updateNoteType: vi.fn(),
@@ -297,4 +298,136 @@ it('persists an association immediately while preserving unsaved metadata and Se
   )
   await answer('Continuă editarea')
   expect(control('name').value).toBe('Unsaved title')
+})
+
+function shoppingRows() {
+  return [
+    { id: 31, name: 'Amount', type: 'number' as const },
+    { id: 32, name: 'Provider', type: 'select' as const },
+    { id: 33, name: 'Archived', type: 'number' as const, archived_at: '2026-11-01' },
+    { id: 34, name: 'Text', type: 'text' as const },
+  ].map((item, index) => ({
+    id: index + 100,
+    note_type_id: 7,
+    field_id: item.id,
+    required: false,
+    sort_order: index,
+    activated_at: '2026-11-01',
+    deactivated_at: null,
+    field: {
+      project_id: 12,
+      key: String(item.id),
+      description: null,
+      unit: null,
+      min: null,
+      max: null,
+      step: null,
+      aggregation: null,
+      first_value_at: null,
+      archived_at: null,
+      created_at: null,
+      updated_at: null,
+      ...item,
+    },
+  }))
+}
+async function selectShopping(name: string, value: string) {
+  const element = document.querySelector<HTMLSelectElement>(
+    `.note-type-editor [data-field="${name}"] select`,
+  )!
+  element.value = value
+  element.dispatchEvent(new Event('change', { bubbles: true }))
+  await flushPromises()
+}
+it('configures Shopping using only active attached fields and an active default option', async () => {
+  vi.mocked(api.noteTypeFields).mockResolvedValue({ data: shoppingRows() })
+  vi.mocked(api.options).mockResolvedValue({
+    data: [
+      {
+        id: 71,
+        field_id: 32,
+        label: 'Shopping',
+        sort_order: 0,
+        archived_at: null,
+        created_at: null,
+        updated_at: null,
+      },
+      {
+        id: 72,
+        field_id: 32,
+        label: 'Archived',
+        sort_order: 1,
+        archived_at: '2026-11-01',
+        created_at: null,
+        updated_at: null,
+      },
+    ],
+  })
+  await open({ noteType: type })
+  const checkbox = document.querySelector<HTMLInputElement>(
+    '.note-type-editor__shopping-check input',
+  )!
+  checkbox.click()
+  await flushPromises()
+  const amount = document.querySelector<HTMLSelectElement>(
+    '[data-field="shopping_amount_field_id"] select',
+  )!
+  expect(Array.from(amount.options).map((option) => option.value)).toEqual(['', '31'])
+  await selectShopping('shopping_amount_field_id', '31')
+  await selectShopping('shopping_provider_field_id', '32')
+  expect(api.options).toHaveBeenCalledExactlyOnceWith(12, 32)
+  const options = document.querySelector<HTMLSelectElement>(
+    '[data-field="shopping_provider_option_id"] select',
+  )!
+  expect(Array.from(options.options).map((option) => option.value)).toEqual(['', '71'])
+  await selectShopping('shopping_provider_option_id', '71')
+  await submit()
+  expect(api.updateNoteType).toHaveBeenCalledExactlyOnceWith(12, 7, {
+    is_shopping: true,
+    shopping_amount_field_id: 31,
+    shopping_provider_field_id: 32,
+    shopping_provider_option_id: 71,
+  })
+})
+it('validates required Shopping selections before saving', async () => {
+  await open({ noteType: type })
+  document.querySelector<HTMLInputElement>('.note-type-editor__shopping-check input')!.click()
+  await flushPromises()
+  await submit()
+  expect(api.updateNoteType).not.toHaveBeenCalled()
+  expect(document.querySelectorAll('.app-select--error')).toHaveLength(3)
+})
+it('disables Shopping with explicit null mappings and does not change the Note Type default', async () => {
+  vi.mocked(api.noteTypeFields).mockResolvedValue({ data: shoppingRows() })
+  vi.mocked(api.options).mockResolvedValue({
+    data: [
+      {
+        id: 71,
+        field_id: 32,
+        label: 'Shopping',
+        sort_order: 0,
+        archived_at: null,
+        created_at: null,
+        updated_at: null,
+      },
+    ],
+  })
+  await open({
+    noteType: {
+      ...type,
+      is_shopping: true,
+      shopping_amount_field_id: 31,
+      shopping_provider_field_id: 32,
+      shopping_provider_option_id: 71,
+    },
+  })
+  document.querySelector<HTMLInputElement>('.note-type-editor__shopping-check input')!.click()
+  await flushPromises()
+  await submit()
+  expect(api.updateNoteType).toHaveBeenCalledExactlyOnceWith(12, 7, {
+    is_shopping: false,
+    shopping_amount_field_id: null,
+    shopping_provider_field_id: null,
+    shopping_provider_option_id: null,
+  })
 })

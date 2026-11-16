@@ -3,6 +3,8 @@ import { computed, ref, useId, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import AppButton from '@/components/ui/AppButton.vue'
+import ShoppingExpenseForm from '@/components/shopping/ShoppingExpenseForm.vue'
+import type { ShoppingExpenseInput } from '@/types/shopping'
 import ShoppingItemGroups from '@/components/shopping/ShoppingItemGroups.vue'
 import ShoppingListQuickAdd from '@/components/shopping/ShoppingListQuickAdd.vue'
 import ShoppingListTabs from '@/components/shopping/ShoppingListTabs.vue'
@@ -38,6 +40,8 @@ const exporting = ref(false)
 const sharingBusy = ref(false)
 const confirmDialog = ref<HTMLDialogElement | null>(null)
 const participantMenu = ref<HTMLDetailsElement | null>(null)
+const withCost = ref(false)
+const expenseForm = ref<InstanceType<typeof ShoppingExpenseForm> | null>(null)
 let request = 0
 const list = computed(() =>
   route.params.id &&
@@ -66,6 +70,7 @@ async function loadList(): Promise<void> {
   detailUnits.value = {}
   sharingBusy.value = false
   tab.value = 'shopping'
+  withCost.value = false
   confirmDialog.value?.close()
   if (!route.params.id) {
     await shopping.load(true)
@@ -156,13 +161,27 @@ async function closeList(): Promise<void> {
     shopping.removingRecipeId !== null
   )
     return
+  let expense: Omit<ShoppingExpenseInput, 'close_list'> | undefined
+  if (withCost.value) {
+    const input = expenseForm.value?.input()
+    if (!input) return
+    expense = input
+  }
   try {
-    await shopping.closeCurrent()
-    notifications.success('Lista a fost închisă.')
+    if (expense) await shopping.closeCurrent(expense)
+    else await shopping.closeCurrent()
+    notifications.success(
+      expense ? 'Lista a fost închisă și costul înregistrat.' : 'Lista a fost închisă.',
+    )
     confirmDialog.value?.close()
     await router.push({ name: 'shopping-lists' })
   } catch (failure) {
-    notifications.error(actionErrorMessage(failure, 'Nu am putut închide lista. Încearcă din nou.'))
+    if (expense) {
+      expenseForm.value?.showError(failure)
+    } else
+      notifications.error(
+        actionErrorMessage(failure, 'Nu am putut închide lista. Încearcă din nou.'),
+      )
   }
 }
 function openCloseDialog(): void {
@@ -299,9 +318,20 @@ watch(tab, () => {
       aria-labelledby="close-list-title"
       @cancel="shopping.closing && $event.preventDefault()"
     >
-      <form @submit.prevent="closeList">
+      <form novalidate @submit.prevent="closeList">
         <h2 id="close-list-title">Închide lista?</h2>
         <p>Lista va fi mutată în istoric și nu va mai putea fi modificată.</p>
+        <label class="shopping-list__cost-option">
+          <input v-model="withCost" type="checkbox" :disabled="shopping.closing" />
+          Închide lista și adaugă cost
+        </label>
+        <ShoppingExpenseForm
+          ref="expenseForm"
+          :key="list?.id ?? 'none'"
+          v-show="withCost"
+          :active="withCost"
+          :disabled="shopping.closing"
+        />
         <div>
           <AppButton
             variant="secondary"
@@ -313,11 +343,12 @@ watch(tab, () => {
             :loading="shopping.closing"
             :disabled="
               checking ||
+              (withCost && expenseForm?.loading) ||
               shopping.addingItem ||
               shopping.addingRecipe ||
               shopping.removingRecipeId !== null
             "
-            >Închide lista</AppButton
+            >{{ withCost ? 'Închide lista și adaugă cost' : 'Închide lista' }}</AppButton
           >
         </div>
       </form>
@@ -439,8 +470,19 @@ watch(tab, () => {
   color: var(--color-text);
   background: var(--color-surface);
 }
+.shopping-list__dialog {
+  max-height: calc(100dvh - 2 * var(--space-4));
+  overflow-y: auto;
+}
 .shopping-list__dialog::backdrop {
   background: var(--color-overlay);
+}
+.shopping-list__cost-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  font-size: 0.9rem;
 }
 .shopping-list__dialog h2 {
   margin: 0;

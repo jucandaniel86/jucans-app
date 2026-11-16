@@ -68,6 +68,8 @@ export interface ShoppingListSummary {
   creator: ShoppingListUser
   is_creator: boolean
   is_shared_with_me: boolean
+  has_expense?: boolean
+  can_register_expense?: boolean
   closed_at: string | null
   created_at: string | null
   recipes_count: number
@@ -89,4 +91,25 @@ export interface ShoppingRecipeResult extends ShoppingListSummary {
   recipe: Omit<RecipeSummary, 'creator' | 'tags'>
   already_present: boolean
   items: ShoppingItem[]
+}
+
+export interface ShoppingExpenseInput {
+  project_id: number
+  amount: string
+  close_list: boolean
+  timezone: string
+}
+
+export interface ShoppingExpenseResponse {
+  already_registered: boolean
+  data: {
+    shopping_list_id: number
+    project_id: number
+    task_id: number | null
+    note_id: number
+    noted_at: string
+    note_deleted: boolean
+    list_status: string
+    closed_at: string | null
+  }
 }

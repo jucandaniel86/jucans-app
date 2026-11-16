@@ -12,6 +12,7 @@ import type {
   ManualShoppingItemInput,
   ShoppingItemUpdateInput,
   ShoppingListSummary,
+  ShoppingExpenseInput,
 } from '@/types/shopping'
 import { shoppingListSummary } from '@/utils/shoppingPresentation'
 
@@ -434,19 +435,34 @@ export const useActiveShoppingListStore = defineStore('active-shopping-list', ()
       if (session === sessionRevision) addingItem.value = false
     }
   }
-  async function closeCurrent(): Promise<void> {
+  async function closeCurrent(expense?: Omit<ShoppingExpenseInput, 'close_list'>): Promise<void> {
     if (!list.value || !list.value.is_creator || busy.value) return
     const listId = list.value.id
     const session = sessionRevision
     closing.value = true
     try {
-      await shoppingApi.closeList(listId)
+      if (expense) {
+        const response = await shoppingApi.registerExpense(listId, { ...expense, close_list: true })
+        if (
+          response.data?.shopping_list_id !== listId ||
+          response.data.project_id !== expense.project_id ||
+          response.data.list_status !== 'closed' ||
+          !response.data.note_id ||
+          !response.data.closed_at
+        )
+          throw new ApiError('Închiderea și înregistrarea costului nu au putut fi confirmate.', 0)
+        if (response.data.note_deleted)
+          throw new ApiError(
+            'Costul există, dar nota este ștearsă. Restaurează nota din proiect.',
+            409,
+          )
+      } else await shoppingApi.closeList(listId)
       if (session !== sessionRevision) return
       openLists.value = openLists.value.filter((candidate) => candidate.id !== listId)
       clearSelection()
       loaded.value = true
     } catch (failure) {
-      if (session === sessionRevision) await mutationFailed(failure, listId)
+      if (!expense && session === sessionRevision) await mutationFailed(failure, listId)
       throw failure
     } finally {
       if (session === sessionRevision) closing.value = false

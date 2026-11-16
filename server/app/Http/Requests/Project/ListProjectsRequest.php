@@ -16,6 +16,7 @@ class ListProjectsRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'shopping_only' => ['sometimes', 'boolean'],
             'status' => ['sometimes', 'required', Rule::in(['active', 'completed', 'archived', 'inactive', 'all'])],
             'category_id' => ['sometimes', 'required', 'integer', 'exists:project_categories,id'],
             'page' => ['sometimes', 'integer', 'min:1'],

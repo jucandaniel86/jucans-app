@@ -27,8 +27,15 @@ export const projectsApi = {
   categories(): Promise<ResourceCollection<ProjectCategory>> {
     return api.get('/project-categories')
   },
-  list(status: 'active' | 'inactive', page = 1): Promise<ProjectListResponse> {
-    return api.get(`/projects?status=${status}&page=${page}&per_page=30`)
+  list(
+    status: 'active' | 'inactive',
+    page = 1,
+    perPage = 30,
+    shoppingOnly = false,
+  ): Promise<ProjectListResponse> {
+    return api.get(
+      `/projects?status=${status}&page=${page}&per_page=${perPage}${shoppingOnly ? '&shopping_only=1' : ''}`,
+    )
   },
   get(id: number): Promise<ResourceItem<Project>> {
     return api.get(`/projects/${id}`)

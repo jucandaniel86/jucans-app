@@ -9,6 +9,9 @@ class ShoppingListResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $hasExpense = (bool) $this->expense_registered_by_me;
+        $owner = (int) $this->created_by === (int) $request->user()->id;
+        $participant = (bool) $this->shared_with_authenticated_user;
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -20,6 +23,9 @@ class ShoppingListResource extends JsonResource
             'is_shared_with_me' => $this->visibility === 'shared'
                 && (int) $this->created_by !== (int) $request->user()->id
                 && (bool) $this->shared_with_authenticated_user,
+            'has_expense' => $hasExpense,
+            'can_register_expense' => $this->status === 'closed' && $this->closed_at !== null && ! $hasExpense
+                && ($owner || ($participant && in_array($this->visibility, ['shared', 'public'], true))),
             'closed_at' => $this->closed_at?->toISOString(),
             'created_at' => $this->created_at?->toISOString(),
             'recipes_count' => $this->whenCounted('recipes'),

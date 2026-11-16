@@ -12,6 +12,8 @@ import type {
   ShoppingListRemovalResult,
   ShoppingListUser,
   ShoppingListVisibility,
+  ShoppingExpenseInput,
+  ShoppingExpenseResponse,
 } from '@/types/shopping'
 
 export const shoppingApi = {
@@ -50,6 +52,9 @@ export const shoppingApi = {
   },
   detachUser(id: number, userId: number): Promise<void> {
     return api.delete(`/shopping-lists/${id}/users/${userId}`)
+  },
+  registerExpense(listId: number, input: ShoppingExpenseInput): Promise<ShoppingExpenseResponse> {
+    return api.post(`/shopping-lists/${listId}/expense`, input)
   },
   closeList(listId: number): Promise<ResourceItem<ShoppingListSummary>> {
     return api.post(`/shopping-lists/${listId}/close`)

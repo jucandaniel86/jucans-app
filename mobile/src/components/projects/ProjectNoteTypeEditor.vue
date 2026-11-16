@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, useId } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
 import AppTextarea from '@/components/ui/AppTextarea.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import ProjectNoteTypeFields from './ProjectNoteTypeFields.vue'
 import ProgressNoteConfirmDialog from './ProgressNoteConfirmDialog.vue'
 import { projectNoteConfigurationApi } from '@/services/projectNoteConfigurationApi'
@@ -12,6 +13,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { Project } from '@/types/projects'
 import type {
   ProjectNoteType,
+  ProjectCustomFieldOption,
   UpdateProjectNoteTypePayload,
 } from '@/types/projectNoteConfiguration'
 
@@ -40,6 +42,65 @@ const form = reactive({
   name: initial?.name ?? '',
   description: initial?.description ?? '',
   template: initial?.template ?? '',
+  is_shopping: initial?.is_shopping ?? false,
+  shopping_amount_field_id: String(initial?.shopping_amount_field_id ?? ''),
+  shopping_provider_field_id: String(initial?.shopping_provider_field_id ?? ''),
+  shopping_provider_option_id: String(initial?.shopping_provider_option_id ?? ''),
+})
+const shoppingOptions = ref<ProjectCustomFieldOption[]>([])
+const shoppingLoading = ref(false)
+const shoppingError = ref('')
+let shoppingSequence = 0
+const shoppingFields = computed(() =>
+  (associations.value?.rows ?? []).filter(
+    (row) => row.field.project_id === props.project.id && !row.field.archived_at,
+  ),
+)
+function fieldOptions(kind: 'number' | 'select') {
+  return [
+    { value: '', label: 'Alege câmpul' },
+    ...shoppingFields.value
+      .filter((row) => row.field.type === kind)
+      .map((row) => ({ value: String(row.field_id), label: row.field.name })),
+  ]
+}
+const providerOptions = computed(() => [
+  { value: '', label: 'Alege opțiunea' },
+  ...shoppingOptions.value
+    .filter((option) => !option.archived_at)
+    .map((option) => ({ value: String(option.id), label: option.label })),
+])
+async function loadShoppingOptions(): Promise<void> {
+  const sequence = ++shoppingSequence
+  shoppingOptions.value = []
+  shoppingError.value = ''
+  shoppingLoading.value = false
+  if (!form.is_shopping || !form.shopping_provider_field_id) return
+  shoppingLoading.value = true
+  try {
+    const response = await projectNoteConfigurationApi.options(
+      props.project.id,
+      Number(form.shopping_provider_field_id),
+    )
+    if (sequence === shoppingSequence) shoppingOptions.value = response.data
+  } catch {
+    if (sequence === shoppingSequence)
+      shoppingError.value = 'Nu am putut încărca opțiunile furnizorului.'
+  } finally {
+    if (sequence === shoppingSequence) shoppingLoading.value = false
+  }
+}
+watch(
+  () => form.shopping_provider_field_id,
+  (_next, previous) => {
+    if (previous !== undefined) form.shopping_provider_option_id = ''
+  },
+)
+watch([() => form.is_shopping, () => form.shopping_provider_field_id], loadShoppingOptions, {
+  immediate: true,
+})
+onBeforeUnmount(() => {
+  shoppingSequence++
 })
 const baseline = JSON.stringify(form)
 const dirty = computed(
@@ -78,6 +139,27 @@ async function save(): Promise<void> {
   else if (form.name.trim().length > 255) errors.value.name = ['Maximum 255 de caractere.']
   if (form.description.length > 10000) errors.value.description = ['Maximum 10.000 de caractere.']
   if (form.template.length > 100000) errors.value.template = ['Maximum 100.000 de caractere.']
+  if (form.is_shopping) {
+    for (const [key, kind] of [
+      ['shopping_amount_field_id', 'number'],
+      ['shopping_provider_field_id', 'select'],
+    ] as const) {
+      if (
+        !shoppingFields.value.some(
+          (row) => row.field_id === Number(form[key]) && row.field.type === kind,
+        )
+      )
+        errors.value[key] = ['Alege un câmp activ asociat tipului.']
+    }
+    if (
+      shoppingLoading.value ||
+      shoppingError.value ||
+      !shoppingOptions.value.some(
+        (option) => option.id === Number(form.shopping_provider_option_id) && !option.archived_at,
+      )
+    )
+      errors.value.shopping_provider_option_id = ['Alege o opțiune activă a furnizorului.']
+  }
   if (Object.keys(errors.value).length) {
     await focusError()
     return
@@ -89,11 +171,27 @@ async function save(): Promise<void> {
       name: form.name.trim(),
       description: form.description || null,
       template: form.template || null,
+      ...(initial || form.is_shopping
+        ? {
+            is_shopping: form.is_shopping,
+            shopping_amount_field_id: form.is_shopping
+              ? Number(form.shopping_amount_field_id)
+              : null,
+            shopping_provider_field_id: form.is_shopping
+              ? Number(form.shopping_provider_field_id)
+              : null,
+            shopping_provider_option_id: form.is_shopping
+              ? Number(form.shopping_provider_option_id)
+              : null,
+          }
+        : {}),
     }
     const patch = initial
       ? (Object.fromEntries(
           Object.entries(data).filter(
-            ([key, value]) => value !== initial[key as keyof ProjectNoteType],
+            ([key, value]) =>
+              value !==
+              (initial[key as keyof ProjectNoteType] ?? (key === 'is_shopping' ? false : null)),
           ),
         ) as UpdateProjectNoteTypePayload)
       : data
@@ -276,6 +374,46 @@ onBeforeUnmount(() => {
         <p v-else class="note-type-editor__fields-hint">
           Salvează tipul de notă, apoi deschide-l pentru a asocia câmpuri.
         </p>
+        <fieldset :disabled="busy || associations?.blocking || !permitted || unknownCreate">
+          <label class="note-type-editor__shopping-check">
+            <input
+              v-model="form.is_shopping"
+              type="checkbox"
+              :disabled="!initial || Boolean(initial.archived_at)"
+            />
+            Folosit în shopping list
+          </label>
+          <p v-if="errors.is_shopping" role="alert">{{ errors.is_shopping[0] }}</p>
+          <template v-if="form.is_shopping">
+            <AppSelect
+              v-model="form.shopping_amount_field_id"
+              label="Câmp sumă (Number) *"
+              :options="fieldOptions('number')"
+              :error="errors.shopping_amount_field_id?.[0]"
+              data-field="shopping_amount_field_id"
+            />
+            <AppSelect
+              v-model="form.shopping_provider_field_id"
+              label="Câmp furnizor (Select) *"
+              :options="fieldOptions('select')"
+              :error="errors.shopping_provider_field_id?.[0]"
+              data-field="shopping_provider_field_id"
+            />
+            <AppSelect
+              v-model="form.shopping_provider_option_id"
+              label="Furnizor implicit *"
+              :options="providerOptions"
+              :disabled="shoppingLoading || !form.shopping_provider_field_id"
+              :error="errors.shopping_provider_option_id?.[0]"
+              data-field="shopping_provider_option_id"
+            />
+            <p v-if="shoppingLoading" role="status">Se încarcă opțiunile…</p>
+            <p v-if="shoppingError" role="alert">
+              {{ shoppingError }}
+              <button type="button" @click="loadShoppingOptions">Reîncearcă</button>
+            </p>
+          </template>
+        </fieldset>
       </form>
       <footer class="note-type-editor__footer">
         <AppButton
@@ -359,6 +497,13 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 12px;
+}
+.note-type-editor__shopping-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  font-size: 0.9rem;
 }
 .note-type-editor fieldset {
   display: grid;

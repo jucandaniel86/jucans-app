@@ -38,7 +38,7 @@ class ShoppingListService
     public function summaryQuery(User $user): Builder
     {
         return $this->accessibleListQuery($user)->withCount($this->summaryCounts())
-            ->with('creator:id,username,avatar')->withExists($this->membershipCount($user));
+            ->with('creator:id,username,avatar')->withExists([...$this->membershipCount($user), ...$this->expenseCount($user)]);
     }
 
     public function getOrCreateOwnedOpen(User $user): array
@@ -64,12 +64,17 @@ class ShoppingListService
     public function loadSummaryCounts(ShoppingList $list, User $user): ShoppingList
     {
         return $list->loadCount($this->summaryCounts())
-            ->loadMissing('creator:id,username,avatar')->loadExists($this->membershipCount($user));
+            ->loadMissing('creator:id,username,avatar')->loadExists([...$this->membershipCount($user), ...$this->expenseCount($user)]);
     }
 
     private function membershipCount(User $user): array
     {
         return ['users as shared_with_authenticated_user' => fn (Builder $query) => $query->whereKey($user->id)];
+    }
+
+    private function expenseCount(User $user): array
+    {
+        return ['expenseNotes as expense_registered_by_me' => fn (Builder $query) => $query->where('project_progress_notes.created_by', $user->id)];
     }
 
     private function summaryCounts(): array

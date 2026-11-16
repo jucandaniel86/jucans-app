@@ -11,6 +11,12 @@ vi.mock('@/services/api', () => ({ api: mocks }))
 import { shoppingApi } from '@/services/shoppingApi'
 
 describe('shoppingApi', () => {
+  it('posts a cost receipt request through the existing authenticated client', async () => {
+    const input = { project_id: 9, amount: '41.15', close_list: true, timezone: 'Europe/Bucharest' }
+    await shoppingApi.registerExpense(5, input)
+    expect(mocks.post).toHaveBeenCalledWith('/shopping-lists/5/expense', input)
+  })
+
   it('uses explicit list IDs for all mutations through the shared API client', async () => {
     await shoppingApi.getOpen()
     await shoppingApi.addRecipe(5, 12)

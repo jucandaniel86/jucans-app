@@ -51,6 +51,12 @@ class ShoppingList extends Model
         return $this->belongsToMany(User::class, 'shopping_list_users')->withTimestamps();
     }
 
+    public function expenseNotes(): HasMany
+    {
+        // A deleted Note still reserves the list/user registration slot.
+        return $this->hasMany(ProjectProgressNote::class, 'shopping_list_id')->withTrashed();
+    }
+
     public function recipes(): BelongsToMany
     {
         return $this->belongsToMany(Recipe::class, 'shopping_list_recipes')
